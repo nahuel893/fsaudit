@@ -22,7 +22,7 @@ El orden de implementación sigue el pipeline, porque cada módulo depende del a
     ├── Definir AnalysisResult (el gap del PRD)
     ├── Métricas por categoría/directorio/período
     ├── Detección de alertas (0-byte, inactivos, etc.)
-    └── Tests
+    └── Tests 
 
   Step 5: Excel Reporter
     ├── BaseReporter ABC
@@ -50,3 +50,56 @@ El orden de implementación sigue el pipeline, porque cada módulo depende del a
     ├── Comparación entre scans
     ├── Proyecciones de crecimiento
     └── Dashboard opcional
+
+
+### Descripciones
+
+● Bien, esto es importante que lo tengas claro porque es la BASE de todo lo que viene después.       
+                                                                                                     
+  Step 1: Infrastructure — Los cimientos                                                             
+                                                                                                     
+  Pensalo como los cimientos de una casa. No es la casa, no vivís ahí, pero sin esto NO CONSTRUÍS    
+  NADA.                                                                                              
+                                                                                                     
+  ¿Qué hizo?                                                      
+  - Definió los contratos de datos — FileRecord, DirectoryRecord, ScanResult, AnalysisResult. Son las
+   dataclasses que TODOS los módulos van a usar para comunicarse entre sí. Es el idioma común del    
+  pipeline.                                                                                      
+  - Creó la estructura del proyecto — pyproject.toml, src layout, los paquetes vacíos (scanner/,     
+  classifier/, analyzer/, reporter/)                                                            
+  - Armó categories.yaml — la configuración que mapea extensiones a categorías                       
+  - Configuró el logging                                                      
+                                                                                                     
+  ¿Por qué primero? Porque Scanner necesita saber qué es un FileRecord para producirlo. Classifier
+  necesita categories.yaml para clasificar. Analyzer necesita AnalysisResult para escribir           
+  resultados. Si no definís estos contratos ANTES, cada módulo inventa su propia estructura y después
+   no encajan. ¿Se entiende?                                                                         
+                                                                  
+  Step 2: Scanner — Los ojos del sistema                                                             
+   
+  Si Infrastructure son los cimientos, el Scanner es el módulo que sale al mundo real y recolecta    
+  datos.                                                          
+                                                                                                     
+  ¿Qué hizo?                                                      
+  - platform_utils.py — Las abstracciones cross-platform: cómo obtener la fecha de creación (distinto
+   en Windows vs Linux), cómo detectar archivos ocultos, cómo leer permisos                          
+  - scanner.py — FileScanner que recorre directorios con os.walk(), y por CADA archivo crea un
+  FileRecord con toda su metadata (tamaño, fechas, extensión, profundidad, etc.)                     
+  - Maneja exclusiones (--exclude), límite de profundidad (--depth), detección de ciclos en symlinks,
+   y errores de permisos sin frenar el escaneo                                                       
+                                                                                                     
+  ¿Por qué segundo? Porque es la ENTRADA del pipeline. Sin datos escaneados, Classifier no tiene qué
+  clasificar, Analyzer no tiene qué analizar, y Reporter no tiene qué reportar. Es así de simple.    
+                                                                  
+  La secuencia natural                                                                               
+                                                                  
+  Infrastructure → define QUÉ forma tienen los datos                                                 
+  Scanner        → PRODUCE esos datos desde el filesystem                                            
+  Classifier     → ENRIQUECE los datos (agrega categoría)
+  Analyzer       → AGREGA los datos (métricas, alertas)                                              
+  Reporter       → PRESENTA los datos (Excel, HTML)                                                  
+  CLI            → CONECTA todo                                                                      
+                                                                                                     
+  Cada paso depende del anterior. No podés clasificar sin antes escanear. No podés analizar sin antes
+   clasificar. Es un pipeline lineal — y eso es lo que lo hace elegante y testeable.                 
+                                                                                                     
