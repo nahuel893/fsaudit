@@ -1,0 +1,23 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Build / distribution
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Virtual environments
+.venv/
+venv/
+
+# Output files
+*.xlsx
+
+# Logs
+*.log

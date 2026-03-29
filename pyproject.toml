@@ -2,12 +2,36 @@
 name = "fsaudit"
 version = "0.1.0"
 description = "Filesystem audit tool — scan, classify, analyze, and report on directory contents"
+authors = [{name = "Nahuel Aguirre", email = "nahuel893@hotmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["filesystem", "audit", "scanner", "report", "excel"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Filesystems",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "openpyxl>=3.1",
     "Jinja2>=3.1",
     "PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nahuel893/fsaudit"
+Repository = "https://github.com/nahuel893/fsaudit"
+Issues = "https://github.com/nahuel893/fsaudit/issues"
 
 [project.optional-dependencies]
 dev = [
