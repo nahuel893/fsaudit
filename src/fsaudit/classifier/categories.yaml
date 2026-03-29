@@ -1,0 +1,122 @@
+# Extension-to-category mapping for FSAudit.
+# Compound extensions MUST appear before their single-extension counterparts.
+# Classifier must implement longest-match: check ".tar.gz" before ".gz".
+
+categories:
+  Oficina:
+    extensions:
+      - .docx
+      - .doc
+      - .xlsx
+      - .xls
+      - .xlsm
+      - .pptx
+      - .ppt
+      - .odt
+      - .ods
+      - .odp
+      - .pdf
+      - .rtf
+      - .csv
+
+  Codigo:
+    extensions:
+      - .py
+      - .js
+      - .ts
+      - .java
+      - .c
+      - .cpp
+      - .h
+      - .cs
+      - .go
+      - .rs
+      - .rb
+      - .php
+      - .sh
+      - .bash
+      - .sql
+      - .html
+      - .css
+      - .json
+      - .yaml
+      - .toml
+      - .xml
+      - .md
+      - .ipynb
+
+  Multimedia:
+    extensions:
+      - .jpg
+      - .jpeg
+      - .png
+      - .gif
+      - .bmp
+      - .svg
+      - .mp4
+      - .avi
+      - .mkv
+      - .mp3
+      - .wav
+      - .flac
+      - .aac
+      - .mov
+      - .webm
+      - .webp
+
+  Datos:
+    extensions:
+      - .db
+      - .sqlite
+      - .sqlite3
+      - .parquet
+      - .arrow
+      - .feather
+      - .pickle
+      - .pkl
+      - .npy
+      - .npz
+      - .h5
+      - .hdf5
+
+  Comprimidos:
+    compound_extensions:
+      - .tar.gz
+      - .tar.bz2
+    extensions:
+      - .zip
+      - .tar
+      - .gz
+      - .bz2
+      - .xz
+      - .7z
+      - .rar
+
+  Ejecutables:
+    extensions:
+      - .exe
+      - .msi
+      - .deb
+      - .rpm
+      - .appimage
+      - .bat
+      - .cmd
+      - .ps1
+      - .vbs
+
+  Sistema:
+    extensions:
+      - .log
+      - .ini
+      - .cfg
+      - .conf
+      - .env
+      - .lock
+      - .tmp
+      - .bak
+      - .swp
+      - .ds_store
+      - .lnk
+
+  SinExtension:
+    match: no_extension  # special rule: files where extension == ""

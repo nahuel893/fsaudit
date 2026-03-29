@@ -1,0 +1,34 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Python 3.10+ (pathlib, os, dataclasses, argparse)
+  Dependencies: openpyxl, Jinja2, PyYAML, pytest
+  Architecture: Pipeline/Filters (CLI → Scanner → Classifier → Analyzer → Reporter)
+  Testing: pytest with tmp_path fixtures, target >= 80% coverage
+  Style: Type hints required, docstrings on public functions
+  Status: Pre-implementation (PRD only, no code yet)
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow pipeline architecture pattern
+    - Each module must be independently testable
+    - Cross-platform compatibility (Windows/Linux) is mandatory
+  verify:
+    - Run pytest if test infrastructure exists
+    - Compare implementation against every spec scenario
+  archive:
+    - Warn before merging destructive deltas (large removals)

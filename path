@@ -1,0 +1,52 @@
+El orden de implementación sigue el pipeline, porque cada módulo depende del anterior:
+
+  Step 1: Infrastructure
+    ├── Estructura del proyecto (pyproject.toml, src layout)
+    ├── FileRecord dataclass (models.py)
+    ├── categories.yaml
+    └── Logging y config básica
+
+  Step 2: Scanner
+    ├── os.walk() con manejo de errores
+    ├── platform_utils.py (ctime, hidden files)
+    ├── Exclusion de directorios
+    └── Tests con tmp_path
+
+  Step 3: Classifier
+    ├── YAML loader
+    ├── Extension mapping (incluyendo compuestas)
+    ├── Default "Unclassified"
+    └── Tests
+
+  Step 4: Analyzer
+    ├── Definir AnalysisResult (el gap del PRD)
+    ├── Métricas por categoría/directorio/período
+    ├── Detección de alertas (0-byte, inactivos, etc.)
+    └── Tests
+
+  Step 5: Excel Reporter
+    ├── BaseReporter ABC
+    ├── Las 8 sheets con openpyxl
+    └── Tests
+
+  Step 6: CLI + Integration
+    ├── argparse entry point
+    ├── Wiring del pipeline completo
+    └── Integration tests end-to-end
+
+  Phase 2 — Advanced
+
+    ├── HTML Reporter (Jinja2 + Chart.js)
+    ├── JSON Reporter
+    ├── Detección de duplicados (hash parcial)
+    ├── Análisis de permisos (Linux)
+    ├── Health Score
+    ├── YAML config externo
+    └── Progress bar (tqdm)
+
+  Phase 3 — Historical
+
+    ├── SQLite persistence
+    ├── Comparación entre scans
+    ├── Proyecciones de crecimiento
+    └── Dashboard opcional
