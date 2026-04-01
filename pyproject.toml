@@ -1,6 +1,6 @@
 [project]
 name = "fsaudit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Filesystem audit tool — scan, classify, analyze, and report on directory contents"
 authors = [{name = "Nahuel Aguirre", email = "nahuel893@hotmail.com"}]
 license = {text = "MIT"}
