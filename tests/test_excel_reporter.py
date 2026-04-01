@@ -229,13 +229,68 @@ class TestDashboard:
         wb = load_workbook(out)
         ws = wb["Dashboard"]
 
+        # Row 1: Title
+        assert ws.cell(row=1, column=1).value == "Dashboard"
+
         # Row 2: Total Archivos
         assert ws.cell(row=2, column=1).value == "Total Archivos"
         assert ws.cell(row=2, column=2).value == 5
 
-        # Row 3: Volumen Total (human-readable string)
-        assert ws.cell(row=3, column=1).value == "Volumen Total"
-        assert "MB" in str(ws.cell(row=3, column=2).value) or "GB" in str(ws.cell(row=3, column=2).value)
+        # Row 3: Tamaño Total (MB) — numeric float
+        assert ws.cell(row=3, column=1).value == "Tamaño Total (MB)"
+        assert isinstance(ws.cell(row=3, column=2).value, float)
+        assert ws.cell(row=3, column=2).value == ExcelReporter._bytes_to_mb(5_032_572)
+
+        # Row 4: Categorías
+        assert ws.cell(row=4, column=1).value == "Categorías"
+        assert ws.cell(row=4, column=2).value == 3
+
+        # Row 5: Alertas Activas
+        assert ws.cell(row=5, column=1).value == "Alertas Activas"
+        # 1 zero-byte + 1 permission + 3 duplicates = 5
+        assert ws.cell(row=5, column=2).value == 5
+
+        wb.close()
+
+    def test_dashboard_top5_categories(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Dashboard"]
+
+        # Row 7: Section header for top 5 categories
+        assert ws.cell(row=7, column=1).value == "Top 5 Categorías por Tamaño"
+        # Row 8: Sub-header
+        assert ws.cell(row=8, column=1).value == "Categoría"
+        assert ws.cell(row=8, column=2).value == "Cantidad"
+        assert ws.cell(row=8, column=3).value == "Tamaño (MB)"
+        # Row 9: First category (Multimedia — largest)
+        assert ws.cell(row=9, column=1).value == "Multimedia"
+        assert ws.cell(row=9, column=2).value == 1  # count
+        assert isinstance(ws.cell(row=9, column=3).value, float)
+
+        wb.close()
+
+    def test_dashboard_top5_directories(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Dashboard"]
+
+        # Find the "Top 5 Directorios por Cantidad" section
+        found = False
+        for row in range(1, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == "Top 5 Directorios por Cantidad":
+                found = True
+                # Next row should have sub-headers
+                assert ws.cell(row=row + 1, column=1).value == "Directorio"
+                assert ws.cell(row=row + 1, column=2).value == "Cantidad"
+                break
+        assert found, "Top 5 Directorios section not found"
 
         wb.close()
 
@@ -257,6 +312,23 @@ class TestPorCategoria:
         # 3 categories + 1 header = 4 rows
         data_rows = ws.max_row - 1  # subtract header
         assert data_rows == 3
+        wb.close()
+
+    def test_size_columns_are_mb_floats(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Por Categoria"]
+
+        # Column C (Volumen MB) and E (Promedio MB) should be floats
+        for row in range(2, ws.max_row + 1):
+            vol = ws.cell(row=row, column=3).value
+            avg = ws.cell(row=row, column=5).value
+            assert isinstance(vol, (int, float)), f"Row {row} col C not numeric: {vol}"
+            assert isinstance(avg, (int, float)), f"Row {row} col E not numeric: {avg}"
+
         wb.close()
 
 
@@ -286,7 +358,7 @@ class TestTimelineSort:
 
 
 # ---------------------------------------------------------------------------
-# 5.8b Top Archivos Pesados has Nombre column
+# 5.8b Top Archivos Pesados has Nombre column with MB sizes
 # ---------------------------------------------------------------------------
 
 
@@ -301,16 +373,19 @@ class TestTopPesadosNombre:
 
         headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
         assert "Nombre" in headers
-        assert headers == ["Ruta", "Nombre", "Tamano", "Categoria", "Ultima Modificacion"]
+        assert headers == ["Ruta", "Nombre", "Tamaño (MB)", "Categoría", "Última Modificación"]
 
         # Verify data rows derive Nombre from path
         assert ws.cell(row=2, column=2).value == "photo.jpg"
         assert ws.cell(row=3, column=2).value == "report.xlsx"
+
+        # Verify size is numeric (int or float)
+        assert isinstance(ws.cell(row=2, column=3).value, (int, float))
         wb.close()
 
 
 # ---------------------------------------------------------------------------
-# 5.8c Archivos Inactivos has Nombre column
+# 5.8c Archivos Inactivos has Nombre column with MB sizes
 # ---------------------------------------------------------------------------
 
 
@@ -325,11 +400,14 @@ class TestInactivosNombre:
 
         headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
         assert "Nombre" in headers
-        assert headers == ["Ruta", "Nombre", "Tamano", "Categoria", "Ultima Modificacion", "Dias Inactivo"]
+        assert headers == ["Ruta", "Nombre", "Tamaño (MB)", "Categoría", "Última Modificación", "Días Inactivo"]
 
         # Verify data rows derive Nombre from path (sorted by days_inactive desc)
         assert ws.cell(row=2, column=2).value == "readme.md"
         assert ws.cell(row=3, column=2).value == "script.py"
+
+        # Verify size is numeric (int or float — 0.0 may be stored as int 0)
+        assert isinstance(ws.cell(row=2, column=3).value, (int, float))
         wb.close()
 
 
@@ -426,5 +504,162 @@ class TestHeaderStyling:
             assert first_cell.font.bold, f"Header not bold in {sheet_name}"
             # Frozen panes
             assert ws.freeze_panes == "A2", f"Freeze panes wrong in {sheet_name}"
+
+        wb.close()
+
+
+# ---------------------------------------------------------------------------
+# 6.1 _bytes_to_mb parametrized
+# ---------------------------------------------------------------------------
+
+
+class TestBytesToMb:
+    @pytest.mark.parametrize(
+        "size_bytes, expected",
+        [
+            (0, 0.0),
+            (1_048_576, 1.0),
+            (2_097_152, 2.0),
+            (500, 0.0),
+            (5_000_000, 4.77),
+            (10_485_760, 10.0),
+        ],
+    )
+    def test_bytes_to_mb(self, size_bytes: int, expected: float) -> None:
+        assert ExcelReporter._bytes_to_mb(size_bytes) == expected
+
+
+# ---------------------------------------------------------------------------
+# 6.3 Autofilter on all tabular sheets
+# ---------------------------------------------------------------------------
+
+
+class TestAutofilterAllSheets:
+    """Verify autofilter is set on all 6 tabular sheets + Inventario."""
+
+    AUTOFILTER_SHEETS = [
+        "Por Categoria",
+        "Timeline",
+        "Top Archivos Pesados",
+        "Archivos Inactivos",
+        "Alertas",
+        "Por Directorio",
+        "Inventario Completo",
+    ]
+
+    def test_autofilter_present_on_tabular_sheets(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+
+        for sheet_name in self.AUTOFILTER_SHEETS:
+            ws = wb[sheet_name]
+            assert ws.auto_filter.ref is not None, f"No autofilter on {sheet_name}"
+            assert ws.auto_filter.ref != "", f"Empty autofilter on {sheet_name}"
+
+        wb.close()
+
+    def test_autofilter_on_empty_data(self, tmp_path: Path) -> None:
+        """Empty sheets should still have autofilter covering headers."""
+        out = tmp_path / "empty.xlsx"
+        ExcelReporter().generate([], AnalysisResult(), out)
+        wb = load_workbook(out)
+
+        for sheet_name in self.AUTOFILTER_SHEETS:
+            ws = wb[sheet_name]
+            ref = ws.auto_filter.ref
+            assert ref is not None, f"No autofilter on empty {sheet_name}"
+            assert ref != "", f"Empty autofilter ref on empty {sheet_name}"
+            # Should end with row 1 (header only)
+            assert ref.endswith("1"), f"Autofilter ref {ref} on {sheet_name} should end at row 1 for empty data"
+
+        wb.close()
+
+    def test_dashboard_has_no_autofilter(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+
+        ws = wb["Dashboard"]
+        assert ws.auto_filter.ref is None or ws.auto_filter.ref == ""
+
+        wb.close()
+
+
+# ---------------------------------------------------------------------------
+# 6.5 Timeline chart assertion
+# ---------------------------------------------------------------------------
+
+
+class TestTimelineChart:
+    def test_chart_exists_with_data(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        """Timeline with >= 2 periods should have a LineChart."""
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Timeline"]
+
+        assert len(ws._charts) == 1
+        chart = ws._charts[0]
+        # After save/load, chart.title is a Title object with rich text runs
+        title_obj = chart.title
+        runs = title_obj.tx.rich.paragraphs[0].r
+        title_text = "".join(run.t for run in runs)
+        assert title_text == "Archivos por Período"
+
+        wb.close()
+
+    def test_no_chart_on_empty_timeline(self, tmp_path: Path) -> None:
+        """Empty timeline should have no chart."""
+        out = tmp_path / "empty.xlsx"
+        ExcelReporter().generate([], AnalysisResult(), out)
+        wb = load_workbook(out)
+        ws = wb["Timeline"]
+
+        assert len(ws._charts) == 0
+
+        wb.close()
+
+    def test_no_chart_on_single_period(self, tmp_path: Path) -> None:
+        """Timeline with only 1 period should have no chart."""
+        ar = AnalysisResult()
+        ar.timeline = {"2025-01": 5}
+        out = tmp_path / "single.xlsx"
+        ExcelReporter().generate([], ar, out)
+        wb = load_workbook(out)
+        ws = wb["Timeline"]
+
+        assert len(ws._charts) == 0
+
+        wb.close()
+
+
+# ---------------------------------------------------------------------------
+# 6.6 Inventario uses MB values
+# ---------------------------------------------------------------------------
+
+
+class TestInventarioMB:
+    def test_size_column_is_mb_float(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Inventario Completo"]
+
+        # Header check
+        assert ws.cell(row=1, column=4).value == "Tamaño (MB)"
+
+        # Data cells should be numeric floats
+        for row in range(2, ws.max_row + 1):
+            val = ws.cell(row=row, column=4).value
+            assert isinstance(val, (int, float)), f"Row {row} size not numeric: {val}"
 
         wb.close()

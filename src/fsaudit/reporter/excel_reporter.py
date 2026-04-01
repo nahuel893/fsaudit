@@ -6,7 +6,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, NamedStyle, numbers
+from openpyxl.chart import LineChart, Reference
+from openpyxl.styles import Font, NamedStyle, PatternFill, numbers
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -79,6 +80,11 @@ class ExcelReporter(BaseReporter):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _bytes_to_mb(size_bytes: int) -> float:
+        """Convert bytes to MB, rounded to 2 decimals."""
+        return round(size_bytes / (1024 * 1024), 2)
+
+    @staticmethod
     def _format_bytes(size_bytes: int) -> str:
         """Return human-readable byte string (B / KB / MB / GB)."""
         if size_bytes < 0:
@@ -96,6 +102,13 @@ class ExcelReporter(BaseReporter):
             cell = ws.cell(row=1, column=col)
             cell.font = bold
         ws.freeze_panes = "A2"
+
+    @staticmethod
+    def _apply_autofilter(ws: Worksheet, num_cols: int) -> None:
+        """Apply autofilter from A1 to last data cell."""
+        last_col = get_column_letter(num_cols)
+        last_row = ws.max_row
+        ws.auto_filter.ref = f"A1:{last_col}{last_row}"
 
     @staticmethod
     def _auto_column_width(
@@ -127,11 +140,16 @@ class ExcelReporter(BaseReporter):
         analysis: AnalysisResult,
         records: list[FileRecord],
     ) -> None:
-        """KPI overview sheet."""
-        headers = ["KPI", "Valor"]
-        ws.append(headers)
+        """KPI overview sheet with professional layout."""
+        title_font = Font(bold=True, size=14)
+        section_font = Font(bold=True, size=12)
+        value_font = Font(bold=True, size=14)
+        label_font = Font(bold=True)
 
-        # Alert count: zero-byte + permission issues + duplicate groups + empty dirs
+        # Row 1: Title
+        ws.cell(row=1, column=1, value="Dashboard").font = title_font
+
+        # Alert count: zero-byte + permission issues + duplicate groups
         alert_count = (
             len(analysis.zero_byte_files)
             + len(analysis.permission_issues)
@@ -140,17 +158,65 @@ class ExcelReporter(BaseReporter):
             )
         )
 
-        ws.append(["Total Archivos", analysis.total_files])
-        ws.append(["Volumen Total", self._format_bytes(analysis.total_size_bytes)])
-        ws.append(["Alertas Activas", alert_count])
-        ws.append([])  # blank row
+        # KPI rows (label col A, value col B)
+        kpis = [
+            ("Total Archivos", analysis.total_files),
+            ("Tamaño Total (MB)", self._bytes_to_mb(analysis.total_size_bytes)),
+            ("Categorías", len(analysis.by_category)),
+            ("Alertas Activas", alert_count),
+        ]
+        for i, (label, value) in enumerate(kpis, start=2):
+            ws.cell(row=i, column=1, value=label).font = label_font
+            ws.cell(row=i, column=2, value=value).font = value_font
 
-        # Category summary sub-table
-        ws.append(["Categoria", "Cantidad"])
-        for cat, stats in analysis.by_category.items():
-            ws.append([cat, stats.get("count", 0)])
+        # Blank row
+        current_row = len(kpis) + 2  # after KPIs + title
 
-        self._apply_header_style(ws, len(headers))
+        # Top 5 Categorías por Tamaño section
+        current_row += 1
+        ws.cell(row=current_row, column=1, value="Top 5 Categorías por Tamaño").font = section_font
+        current_row += 1
+        ws.cell(row=current_row, column=1, value="Categoría").font = label_font
+        ws.cell(row=current_row, column=2, value="Cantidad").font = label_font
+        ws.cell(row=current_row, column=3, value="Tamaño (MB)").font = label_font
+        current_row += 1
+
+        # Sort categories by bytes descending, take top 5
+        sorted_cats = sorted(
+            analysis.by_category.items(),
+            key=lambda x: x[1].get("bytes", 0),
+            reverse=True,
+        )[:5]
+        for cat, stats in sorted_cats:
+            ws.cell(row=current_row, column=1, value=cat)
+            ws.cell(row=current_row, column=2, value=stats.get("count", 0))
+            ws.cell(row=current_row, column=3, value=self._bytes_to_mb(stats.get("bytes", 0)))
+            current_row += 1
+
+        # Blank row
+        current_row += 1
+
+        # Top 5 Directorios por Cantidad section
+        ws.cell(row=current_row, column=1, value="Top 5 Directorios por Cantidad").font = section_font
+        current_row += 1
+        ws.cell(row=current_row, column=1, value="Directorio").font = label_font
+        ws.cell(row=current_row, column=2, value="Cantidad").font = label_font
+        current_row += 1
+
+        # Compute dir stats from records
+        dir_counts: dict[str, int] = defaultdict(int)
+        for rec in records:
+            dir_counts[rec.parent_dir] += 1
+
+        sorted_dirs = sorted(dir_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        for dirname, count in sorted_dirs:
+            ws.cell(row=current_row, column=1, value=dirname)
+            ws.cell(row=current_row, column=2, value=count)
+            current_row += 1
+
+        # Apply header style and column width
+        # Style row 1 as header
+        ws.freeze_panes = "A2"
         self._auto_column_width(ws)
 
     def _write_por_categoria(
@@ -158,56 +224,78 @@ class ExcelReporter(BaseReporter):
     ) -> None:
         """Category breakdown sheet."""
         headers = [
-            "Categoria",
+            "Categoría",
             "Cantidad",
-            "Volumen (bytes)",
+            "Volumen (MB)",
             "% del Total",
-            "Promedio Tamano",
-            "Mas Reciente",
-            "Mas Antiguo",
+            "Promedio (MB)",
+            "Más Reciente",
+            "Más Antiguo",
         ]
         ws.append(headers)
         for cat, stats in analysis.by_category.items():
             ws.append([
                 cat,
                 stats.get("count", 0),
-                stats.get("bytes", 0),
+                self._bytes_to_mb(stats.get("bytes", 0)),
                 round(stats.get("percent", 0.0), 2),
-                round(stats.get("avg_size", 0.0), 2),
+                self._bytes_to_mb(int(stats.get("avg_size", 0.0))),
                 str(stats.get("newest", "")),
                 str(stats.get("oldest", "")),
             ])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
     def _write_timeline(self, ws: Worksheet, analysis: AnalysisResult) -> None:
         """Monthly distribution sheet, sorted chronologically."""
-        headers = ["Periodo", "Cantidad"]
+        headers = ["Período", "Cantidad"]
         ws.append(headers)
-        for period in sorted(analysis.timeline.keys()):
+        sorted_periods = sorted(analysis.timeline.keys())
+        for period in sorted_periods:
             ws.append([period, analysis.timeline[period]])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
+
+        # Add LineChart if we have enough data points
+        num_rows = len(sorted_periods)
+        if num_rows >= 2:
+            chart = LineChart()
+            chart.title = "Archivos por Período"
+            chart.y_axis.title = "Cantidad"
+            chart.x_axis.title = "Período"
+            chart.style = 10
+
+            data = Reference(ws, min_col=2, min_row=1, max_row=num_rows + 1)
+            cats = Reference(ws, min_col=1, min_row=2, max_row=num_rows + 1)
+            chart.add_data(data, titles_from_data=True)
+            chart.set_categories(cats)
+            chart.width = 20
+            chart.height = 12
+
+            ws.add_chart(chart, f"A{num_rows + 3}")
 
     def _write_top_pesados(
         self, ws: Worksheet, analysis: AnalysisResult
     ) -> None:
         """Top largest files sheet."""
-        headers = ["Ruta", "Nombre", "Tamano", "Categoria", "Ultima Modificacion"]
+        headers = ["Ruta", "Nombre", "Tamaño (MB)", "Categoría", "Última Modificación"]
         ws.append(headers)
         for item in analysis.top_largest:
             path = item.get("path", "")
             ws.append([
                 path,
                 Path(path).name,
-                self._format_bytes(item.get("size_bytes", 0)),
+                self._bytes_to_mb(item.get("size_bytes", 0)),
                 item.get("category", ""),
                 str(item.get("mtime", "")),
             ])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
     def _write_inactivos(
@@ -217,10 +305,10 @@ class ExcelReporter(BaseReporter):
         headers = [
             "Ruta",
             "Nombre",
-            "Tamano",
-            "Categoria",
-            "Ultima Modificacion",
-            "Dias Inactivo",
+            "Tamaño (MB)",
+            "Categoría",
+            "Última Modificación",
+            "Días Inactivo",
         ]
         ws.append(headers)
         sorted_items = sorted(
@@ -233,13 +321,14 @@ class ExcelReporter(BaseReporter):
             ws.append([
                 path,
                 Path(path).name,
-                self._format_bytes(item.get("size_bytes", 0)),
+                self._bytes_to_mb(item.get("size_bytes", 0)),
                 item.get("category", ""),
                 str(item.get("mtime", "")),
                 item.get("days_inactive", 0),
             ])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
     def _write_alertas(
@@ -284,6 +373,7 @@ class ExcelReporter(BaseReporter):
                 ])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
     def _write_por_directorio(
@@ -293,8 +383,8 @@ class ExcelReporter(BaseReporter):
         headers = [
             "Directorio",
             "Cantidad Archivos",
-            "Volumen Total",
-            "Volumen Promedio",
+            "Volumen Total (MB)",
+            "Volumen Promedio (MB)",
         ]
         ws.append(headers)
 
@@ -317,11 +407,12 @@ class ExcelReporter(BaseReporter):
             ws.append([
                 dirname,
                 stats["count"],
-                self._format_bytes(stats["bytes"]),
-                self._format_bytes(int(avg)),
+                self._bytes_to_mb(stats["bytes"]),
+                self._bytes_to_mb(int(avg)),
             ])
 
         self._apply_header_style(ws, len(headers))
+        self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
     def _write_inventario(
@@ -331,12 +422,12 @@ class ExcelReporter(BaseReporter):
         headers = [
             "Ruta",
             "Nombre",
-            "Extension",
-            "Tamano",
-            "Categoria",
-            "Fecha Modificacion",
-            "Fecha Creacion",
-            "Ultimo Acceso",
+            "Extensión",
+            "Tamaño (MB)",
+            "Categoría",
+            "Fecha Modificación",
+            "Fecha Creación",
+            "Último Acceso",
             "Profundidad",
             "Oculto",
             "Permisos",
@@ -349,7 +440,7 @@ class ExcelReporter(BaseReporter):
                 str(rec.path),
                 rec.name,
                 rec.extension,
-                rec.size_bytes,
+                self._bytes_to_mb(rec.size_bytes),
                 rec.category,
                 str(rec.mtime),
                 str(rec.creation_time),
