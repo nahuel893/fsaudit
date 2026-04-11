@@ -1,0 +1,48 @@
+/* fsaudit TUI — base layout styles */
+
+Screen {
+    background: $surface;
+}
+
+#lbl-health {
+    text-align: center;
+    padding: 1;
+    width: 100%;
+    border: solid $accent;
+}
+
+#lbl-path {
+    padding: 1;
+    color: $text-muted;
+}
+
+.field-label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+.error {
+    color: $error;
+    padding: 0 1;
+}
+
+Button {
+    margin: 1 1 0 0;
+}
+
+#progress {
+    margin: 1 0;
+}
+
+#log {
+    height: 60%;
+    border: solid $accent;
+}
+
+DataTable {
+    height: 100%;
+}
+
+TabbedContent {
+    height: 1fr;
+}

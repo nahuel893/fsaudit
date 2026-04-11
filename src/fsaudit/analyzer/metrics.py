@@ -21,3 +21,6 @@ class AnalysisResult:
     duplicates_by_name: dict[str, list[Any]] = field(default_factory=dict)
     timeline: dict[str, Any] = field(default_factory=dict)
     permission_issues: list[Any] = field(default_factory=list)
+    duplicates_by_hash: dict[str, list[Any]] = field(default_factory=dict)
+    health_score: float = 100.0
+    health_breakdown: dict[str, float] = field(default_factory=dict)

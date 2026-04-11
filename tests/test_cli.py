@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 
 import pytest
+from rich.console import Console
 
 from fsaudit.cli import build_parser, main
 
@@ -169,3 +171,257 @@ class TestMainExclude:
             "--exclude", "node_modules",
         ])
         assert result == 0
+
+
+class TestRichProgressCallback:
+    """Task 2B.3 — scan uses on_file callback for progress reporting."""
+
+    def test_cli_scan_uses_progress_callback(self, tmp_tree: Path) -> None:
+        """FileScanner.scan is called with on_file= kwarg."""
+        from unittest.mock import patch, MagicMock
+        from fsaudit.scanner.scanner import FileScanner
+        from fsaudit.scanner.models import ScanResult
+
+        # Build a minimal real ScanResult using actual scanner to avoid complex mocking
+        real_result = FileScanner().scan(tmp_tree)
+
+        with patch.object(FileScanner, "scan", wraps=FileScanner().scan) as mock_scan:
+            # Replace with a simpler approach: patch the class method
+            pass
+
+        # Simpler: just check that scan is called with on_file keyword
+        scan_calls: list[dict] = []
+        original_scan = FileScanner.scan
+
+        def capturing_scan(self_inner, root, *, on_file=None):
+            scan_calls.append({"on_file": on_file})
+            return original_scan(self_inner, root, on_file=on_file)
+
+        with patch.object(FileScanner, "scan", capturing_scan):
+            buf = StringIO()
+            result = main(
+                ["--path", str(tmp_tree), "--output-dir", str(tmp_tree)],
+                _console=Console(file=buf, highlight=False),
+            )
+
+        assert result == 0
+        assert len(scan_calls) == 1, "scan() should have been called once"
+        assert scan_calls[0]["on_file"] is not None, "on_file callback must be passed to scan()"
+
+
+class TestRichConsoleInjection:
+    """Task 2B.2 — rich Console injection into main()."""
+
+    def test_main_accepts_console_injection(self, tmp_tree: Path) -> None:
+        """main() accepts _console= kwarg and returns 0."""
+        buf = StringIO()
+        console = Console(file=buf, highlight=False)
+        result = main(
+            ["--path", str(tmp_tree), "--output-dir", str(tmp_tree)],
+            _console=console,
+        )
+        assert result == 0
+
+    def test_main_no_bare_print(self) -> None:
+        """cli.py must contain zero bare print( calls after the migration."""
+        import ast
+        from pathlib import Path as P
+
+        src = P("/home/nh/fsaudit/src/fsaudit/cli.py").read_text()
+        tree = ast.parse(src)
+
+        bare_prints = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ]
+        assert bare_prints == [], (
+            f"Found {len(bare_prints)} bare print() call(s) in cli.py at lines "
+            + str([n.lineno for n in bare_prints])
+        )
+
+
+class TestFormatFlag:
+    """Task 2B.5 — --format flag and HTML output."""
+
+    def test_cli_format_flag_accepted_excel(self) -> None:
+        """Parser accepts --format excel."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--format", "excel"])
+        assert args.format == "excel"
+
+    def test_cli_format_flag_accepted_html(self) -> None:
+        """Parser accepts --format html."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--format", "html"])
+        assert args.format == "html"
+
+    def test_cli_format_default_is_excel(self) -> None:
+        """--format defaults to 'excel'."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp"])
+        assert args.format == "excel"
+
+    def test_cli_format_html_creates_html_file(self, tmp_tree: Path) -> None:
+        """Running with --format html produces an .html output file."""
+        result = main([
+            "--path", str(tmp_tree),
+            "--output-dir", str(tmp_tree),
+            "--format", "html",
+        ])
+        assert result == 0
+        html_files = list(tmp_tree.glob("*.html"))
+        assert len(html_files) == 1, f"Expected one .html file, got: {html_files}"
+
+    def test_cli_html_filename_has_html_extension(self, tmp_tree: Path) -> None:
+        """HTML output file has .html extension."""
+        from datetime import datetime as dt
+        main([
+            "--path", str(tmp_tree),
+            "--output-dir", str(tmp_tree),
+            "--format", "html",
+        ])
+        date_str = dt.now().strftime("%Y-%m-%d")
+        expected = tmp_tree / f"{tmp_tree.name}_audit_{date_str}.html"
+        assert expected.exists(), f"Expected {expected} to exist"
+
+
+class TestHashDuplicatesCLI:
+    """Tests for --hash-duplicates CLI flag (Task 2A.4)."""
+
+    def test_cli_hash_duplicates_flag_accepted(self) -> None:
+        """Parser accepts --hash-duplicates without error."""
+        from fsaudit.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--hash-duplicates"])
+        assert args.hash_duplicates is True
+
+    def test_cli_hash_duplicates_default_false(self) -> None:
+        """--hash-duplicates defaults to False."""
+        from fsaudit.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp"])
+        assert args.hash_duplicates is False
+
+    def test_cli_hash_duplicates_passed_to_analyze(self, tmp_path: Path) -> None:
+        """When --hash-duplicates is set, analyze() is called with hash_duplicates=True."""
+        from unittest.mock import patch, MagicMock
+        from fsaudit.analyzer.metrics import AnalysisResult
+
+        dummy_result = AnalysisResult()
+
+        with patch("fsaudit.cli.analyze", return_value=dummy_result) as mock_analyze, \
+             patch("fsaudit.cli.ExcelReporter") as mock_reporter:
+            mock_reporter.return_value.generate.return_value = None
+            result = main([
+                "--path", str(tmp_path),
+                "--output-dir", str(tmp_path),
+                "--hash-duplicates",
+            ])
+
+        assert result == 0
+        call_kwargs = mock_analyze.call_args.kwargs
+        assert call_kwargs.get("hash_duplicates") is True
+
+
+# ---------------------------------------------------------------------------
+# Task 2D.4: --save, --db, --history, --diff flags
+# ---------------------------------------------------------------------------
+
+class TestPersistenceFlags:
+    """Tests for CLI persistence flags (Task 2D.4)."""
+
+    def test_cli_save_flag_accepted(self) -> None:
+        """Parser recognizes --save."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--save"])
+        assert args.save is True
+
+    def test_cli_db_flag_accepted(self) -> None:
+        """Parser recognizes --db with string argument."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--db", "/tmp/test.db"])
+        assert args.db == "/tmp/test.db"
+
+    def test_cli_history_flag_accepted(self) -> None:
+        """Parser recognizes --history."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--history"])
+        assert args.history is True
+
+    def test_cli_diff_flag_accepted(self) -> None:
+        """Parser recognizes --diff with int argument."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--diff", "42"])
+        assert args.diff == 42
+
+    def test_cli_save_creates_db(self, tmp_path: Path, tmp_tree: Path) -> None:
+        """Integration: main with --save --db creates the db file."""
+        db_path = tmp_path / "test.db"
+        result = main([
+            "--path", str(tmp_tree),
+            "--output-dir", str(tmp_tree),
+            "--save",
+            "--db", str(db_path),
+        ])
+        assert result == 0
+        assert db_path.exists()
+
+    def test_cli_no_save_no_db(self, tmp_path: Path, tmp_tree: Path) -> None:
+        """main without --save does not create a db file."""
+        db_path = tmp_path / "test.db"
+        result = main([
+            "--path", str(tmp_tree),
+            "--output-dir", str(tmp_tree),
+            "--db", str(db_path),
+        ])
+        assert result == 0
+        assert not db_path.exists()
+
+    def test_cli_history_empty(self, tmp_path: Path) -> None:
+        """--history on non-existent db exits 0 and prints 'No runs recorded'."""
+        from io import StringIO
+        from rich.console import Console
+
+        db_path = tmp_path / "nonexistent.db"
+        buf = StringIO()
+        console = Console(file=buf, highlight=False)
+        result = main(
+            ["--path", "/tmp", "--history", "--db", str(db_path)],
+            _console=console,
+        )
+        assert result == 0
+        output = buf.getvalue()
+        assert "No runs recorded" in output
+
+
+# ---------------------------------------------------------------------------
+# Task 2D.5: --save-files, --query flags
+# ---------------------------------------------------------------------------
+
+class TestQueryFlags:
+    """Tests for --save-files and --query CLI flags (Task 2D.5)."""
+
+    def test_cli_save_files_flag_accepted(self) -> None:
+        """Parser recognizes --save-files."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--save-files"])
+        assert args.save_files is True
+
+    def test_cli_query_flag_accepted(self) -> None:
+        """Parser recognizes --query with string argument."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--query", "SELECT id FROM runs"])
+        assert args.query == "SELECT id FROM runs"
+
+    def test_cli_query_non_select_exits_1(self, tmp_path: Path) -> None:
+        """--query with non-SELECT SQL exits with code 1."""
+        db_path = tmp_path / "test.db"
+        result = main([
+            "--path", "/tmp",
+            "--query", "DELETE FROM runs",
+            "--db", str(db_path),
+        ])
+        assert result == 1

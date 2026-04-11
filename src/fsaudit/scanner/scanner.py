@@ -8,6 +8,7 @@ defined in :mod:`fsaudit.scanner.models`.
 import fnmatch
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -54,11 +55,23 @@ class FileScanner:
     # Public API
     # ------------------------------------------------------------------
 
-    def scan(self, root: Path) -> ScanResult:
+    def scan(
+        self,
+        root: Path,
+        *,
+        on_file: Callable[[Path], None] | None = None,
+    ) -> ScanResult:
         """Walk *root* and return a :class:`ScanResult`.
 
         Never raises — all per-file and per-directory errors are caught
         and appended to :attr:`ScanResult.errors`.
+
+        Args:
+            root: Directory to scan.
+            on_file: Optional callback invoked with the :class:`Path` of each
+                successfully scanned file.  Called AFTER the record is appended
+                to the files list.  Any exception raised by the callback
+                propagates immediately.
         """
         root = Path(os.path.abspath(root))
         files: list[FileRecord] = []
@@ -122,6 +135,8 @@ class FileScanner:
                             parent_dir=str(Path(full).parent),
                         )
                     )
+                    if on_file is not None:
+                        on_file(Path(full))
                 except (PermissionError, OSError) as exc:
                     logger.warning("Skipping %s: %s", full, exc)
                     errors.append(f"{full}: {exc}")

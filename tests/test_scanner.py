@@ -346,3 +346,60 @@ class TestScanResultStructure:
         result = FileScanner().scan(flat_tree)
         with pytest.raises(AttributeError):
             result.root_path = Path("/nope")  # type: ignore[misc]
+
+
+# ===================================================================
+# Task 2B.1 — on_file callback
+# ===================================================================
+
+
+class TestOnFileCallback:
+    """on_file callback for scan() progress reporting."""
+
+    def test_scan_on_file_called_per_file(self, flat_tree: Path) -> None:
+        """Callback invoked exactly once per successfully scanned file."""
+        calls: list[Path] = []
+        result = FileScanner().scan(flat_tree, on_file=lambda p: calls.append(p))
+        assert len(calls) == len(result.files)
+
+    def test_scan_no_callback_no_error(self, flat_tree: Path) -> None:
+        """scan(root) without on_file still works normally."""
+        result = FileScanner().scan(flat_tree)
+        assert len(result.files) == 2
+
+    def test_scan_on_file_receives_path_objects(self, flat_tree: Path) -> None:
+        """Callback receives Path instances, not strings."""
+        received: list[object] = []
+        FileScanner().scan(flat_tree, on_file=lambda p: received.append(p))
+        assert all(isinstance(p, Path) for p in received)
+
+    def test_scan_on_file_exception_propagates(self, flat_tree: Path) -> None:
+        """If callback raises, the exception propagates out of scan()."""
+        def bad_callback(p: Path) -> None:
+            raise ValueError("callback failed")
+
+        with pytest.raises(ValueError, match="callback failed"):
+            FileScanner().scan(flat_tree, on_file=bad_callback)
+
+    def test_scan_on_file_not_called_for_errored_files(self, tmp_path: Path) -> None:
+        """Files that fail stat do NOT trigger the callback."""
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("chmod not reliable on Windows")
+
+        restricted = tmp_path / "noaccess"
+        restricted.mkdir()
+        (restricted / "secret.txt").write_text("x")
+        (tmp_path / "ok.txt").write_text("fine")
+        restricted.chmod(0o000)
+
+        calls: list[Path] = []
+        try:
+            FileScanner().scan(tmp_path, on_file=lambda p: calls.append(p))
+        finally:
+            restricted.chmod(0o755)
+
+        # Only ok.txt should trigger the callback
+        names = [p.name for p in calls]
+        assert "secret.txt" not in names
+        assert "ok.txt" in names

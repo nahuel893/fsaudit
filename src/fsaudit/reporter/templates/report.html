@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FSAudit Report — {{ root_path }}</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --surface: #ffffff;
+    --border: #dee2e6;
+    --primary: #0d6efd;
+    --success: #198754;
+    --warning: #ffc107;
+    --danger: #dc3545;
+    --text: #212529;
+    --muted: #6c757d;
+    --radius: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+  header { background: var(--primary); color: #fff; padding: 1.5rem 2rem; }
+  header h1 { font-size: 1.6rem; }
+  header p { opacity: .8; margin-top: .3rem; }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  section h2 { padding: .75rem 1rem; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 1.05rem; }
+  .section-body { padding: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th { text-align: left; padding: .5rem .75rem; background: var(--bg); border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; }
+  th:hover { background: #e2e6ea; }
+  td { padding: .45rem .75rem; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: rgba(0,0,0,.02); }
+  .badge { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .badge-success { background: #d1e7dd; color: #0a3622; }
+  .badge-warning { background: #fff3cd; color: #664d03; }
+  .badge-danger  { background: #f8d7da; color: #58151c; }
+  .score-card { text-align: center; padding: 2rem; }
+  .score-card .score { font-size: 3.5rem; font-weight: 700; }
+  .score-card .label { color: var(--muted); margin-top: .5rem; }
+  .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+  .kv { background: var(--bg); border-radius: var(--radius); padding: .8rem 1rem; }
+  .kv .val { font-size: 1.5rem; font-weight: 700; margin-top: .3rem; }
+  .kv .lbl { font-size: .8rem; color: var(--muted); }
+  .notice { color: var(--muted); font-style: italic; padding: .5rem 0; }
+  .truncation-notice { background: #fff3cd; border: 1px solid #ffc107; border-radius: var(--radius); padding: .5rem 1rem; margin-bottom: .75rem; font-size: .85rem; }
+  .bar-chart { display: flex; flex-direction: column; gap: .4rem; }
+  .bar-row { display: flex; align-items: center; gap: .5rem; font-size: .85rem; }
+  .bar-row .bar-label { min-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-row .bar-track { flex: 1; background: var(--border); border-radius: 999px; height: 12px; overflow: hidden; }
+  .bar-row .bar-fill { height: 100%; border-radius: 999px; background: var(--primary); }
+  .bar-row .bar-val { min-width: 60px; text-align: right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FSAudit Report</h1>
+  <p>Root: {{ root_path }} &mdash; Generated: {{ generated_at }}</p>
+</header>
+
+<div class="container">
+
+<!-- ===================== SUMMARY ===================== -->
+<section id="summary">
+  <h2>Summary</h2>
+  <div class="section-body">
+    <div class="kv-grid">
+      <div class="kv"><div class="lbl">Total Files</div><div class="val">{{ analysis.total_files | format_int }}</div></div>
+      <div class="kv"><div class="lbl">Total Size</div><div class="val">{{ analysis.total_size_bytes | mb }} MB</div></div>
+      <div class="kv"><div class="lbl">Inactive Files</div><div class="val">{{ analysis.inactive_files | length }}</div></div>
+      <div class="kv"><div class="lbl">Zero-Byte Files</div><div class="val">{{ analysis.zero_byte_files | length }}</div></div>
+      <div class="kv"><div class="lbl">Name Duplicates (groups)</div><div class="val">{{ analysis.duplicates_by_name | length }}</div></div>
+      <div class="kv"><div class="lbl">Hash Duplicates (groups)</div><div class="val">{{ analysis.duplicates_by_hash | length }}</div></div>
+      <div class="kv"><div class="lbl">Empty Directories</div><div class="val">{{ analysis.empty_directories | length }}</div></div>
+      <div class="kv"><div class="lbl">Permission Issues</div><div class="val">{{ analysis.permission_issues | length }}</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HEALTH BREAKDOWN ===================== -->
+<section id="health-breakdown">
+  <h2>Filesystem Health</h2>
+  <div class="section-body">
+    <div class="score-card">
+      <div class="score" style="color: {{ health_color }}">{{ "%.1f"|format(analysis.health_score) }}/100</div>
+      <div class="label">Health Score</div>
+    </div>
+    <div class="bar-chart">
+      {% for key, penalty in analysis.health_breakdown.items() %}
+      <div class="bar-row">
+        <span class="bar-label">{{ key }}</span>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (penalty / max_penalty_weight * 100) | round(1) }}%; background: var(--danger);"></div></div>
+        <span class="bar-val">-{{ "%.2f"|format(penalty) }}</span>
+      </div>
+      {% else %}
+      <p class="notice">No breakdown available.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CATEGORIES ===================== -->
+<section id="categories">
+  <h2>File Categories</h2>
+  <div class="section-body">
+    {% if analysis.by_category %}
+    <div class="bar-chart" style="margin-bottom:1rem;">
+      {% set max_cat_bytes = analysis.by_category.values() | map(attribute='bytes') | max %}
+      {% for cat, data in analysis.by_category.items() | sort(attribute='1.bytes', reverse=True) %}
+      <div class="bar-row">
+        <span class="bar-label">{{ cat }}</span>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (data.bytes / max_cat_bytes * 100) | round(1) if max_cat_bytes > 0 else 0 }}%;"></div></div>
+        <span class="bar-val">{{ data.bytes | mb }} MB</span>
+      </div>
+      {% endfor %}
+    </div>
+    <table id="categories-table">
+      <thead><tr>
+        <th onclick="sortTable('categories-table', 0)">Category</th>
+        <th onclick="sortTable('categories-table', 1)">Files</th>
+        <th onclick="sortTable('categories-table', 2)">Size (MB)</th>
+        <th onclick="sortTable('categories-table', 3)">% of Total</th>
+        <th onclick="sortTable('categories-table', 4)">Avg Size (MB)</th>
+      </tr></thead>
+      <tbody>
+        {% for cat, data in analysis.by_category.items() | sort(attribute='1.bytes', reverse=True) %}
+        <tr>
+          <td>{{ cat }}</td>
+          <td>{{ data.count }}</td>
+          <td>{{ data.bytes | mb }}</td>
+          <td>{{ "%.1f"|format(data.percent) }}%</td>
+          <td>{{ data.avg_size | mb }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No category data available.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== TOP LARGEST ===================== -->
+<section id="top-largest">
+  <h2>Top Largest Files</h2>
+  <div class="section-body">
+    {% if analysis.top_largest %}
+    <table id="top-largest-table">
+      <thead><tr>
+        <th onclick="sortTable('top-largest-table', 0)">Path</th>
+        <th onclick="sortTable('top-largest-table', 1)">Size (MB)</th>
+        <th onclick="sortTable('top-largest-table', 2)">Category</th>
+        <th onclick="sortTable('top-largest-table', 3)">Modified</th>
+      </tr></thead>
+      <tbody>
+        {% for f in analysis.top_largest %}
+        <tr>
+          <td>{{ f.path }}</td>
+          <td>{{ f.size_bytes | mb }}</td>
+          <td>{{ f.category }}</td>
+          <td>{{ f.mtime.strftime('%Y-%m-%d') if f.mtime else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No files found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== INACTIVE ===================== -->
+<section id="inactive">
+  <h2>Inactive Files</h2>
+  <div class="section-body">
+    {% set inactive_list = analysis.inactive_files %}
+    {% if inactive_list | length > max_rows %}
+    <div class="truncation-notice">Showing first {{ max_rows }} of {{ inactive_list | length }} inactive files.</div>
+    {% endif %}
+    {% if inactive_list %}
+    <table id="inactive-table">
+      <thead><tr>
+        <th onclick="sortTable('inactive-table', 0)">Path</th>
+        <th onclick="sortTable('inactive-table', 1)">Size (MB)</th>
+        <th onclick="sortTable('inactive-table', 2)">Category</th>
+        <th onclick="sortTable('inactive-table', 3)">Last Modified</th>
+        <th onclick="sortTable('inactive-table', 4)">Days Inactive</th>
+      </tr></thead>
+      <tbody>
+        {% for f in inactive_list[:max_rows] %}
+        <tr>
+          <td>{{ f.path }}</td>
+          <td>{{ f.size_bytes | mb }}</td>
+          <td>{{ f.category }}</td>
+          <td>{{ f.mtime.strftime('%Y-%m-%d') if f.mtime else '' }}</td>
+          <td>{{ f.days_inactive }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No inactive files found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== ZERO-BYTE ===================== -->
+<section id="zero-byte">
+  <h2>Zero-Byte Files</h2>
+  <div class="section-body">
+    {% if analysis.zero_byte_files %}
+    <table id="zero-byte-table">
+      <thead><tr>
+        <th onclick="sortTable('zero-byte-table', 0)">Path</th>
+        <th onclick="sortTable('zero-byte-table', 1)">Category</th>
+        <th onclick="sortTable('zero-byte-table', 2)">Modified</th>
+      </tr></thead>
+      <tbody>
+        {% for f in analysis.zero_byte_files %}
+        <tr>
+          <td>{{ f.path }}</td>
+          <td>{{ f.category }}</td>
+          <td>{{ f.mtime.strftime('%Y-%m-%d') if f.mtime else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No zero-byte files found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== NAME DUPLICATES ===================== -->
+<section id="name-duplicates">
+  <h2>Name Duplicates</h2>
+  <div class="section-body">
+    {% if analysis.duplicates_by_name %}
+    <table id="name-dup-table">
+      <thead><tr>
+        <th onclick="sortTable('name-dup-table', 0)">Filename</th>
+        <th onclick="sortTable('name-dup-table', 1)">Count</th>
+        <th onclick="sortTable('name-dup-table', 2)">Paths</th>
+      </tr></thead>
+      <tbody>
+        {% for name, paths in analysis.duplicates_by_name.items() %}
+        <tr>
+          <td>{{ name }}</td>
+          <td>{{ paths | length }}</td>
+          <td>{{ paths | join('<br>') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No name duplicates found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== HASH DUPLICATES ===================== -->
+<section id="hash-duplicates">
+  <h2>Hash Duplicates (Byte-level)</h2>
+  <div class="section-body">
+    {% if analysis.duplicates_by_hash %}
+    <table id="hash-dup-table">
+      <thead><tr>
+        <th onclick="sortTable('hash-dup-table', 0)">SHA-256</th>
+        <th onclick="sortTable('hash-dup-table', 1)">Count</th>
+        <th onclick="sortTable('hash-dup-table', 2)">Paths</th>
+      </tr></thead>
+      <tbody>
+        {% for digest, paths in analysis.duplicates_by_hash.items() %}
+        <tr>
+          <td style="font-family:monospace;font-size:.8rem;">{{ digest[:16] }}...</td>
+          <td>{{ paths | length }}</td>
+          <td>{{ paths | join('<br>') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No byte-level duplicates found (or hash check not enabled).</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== PERMISSION ISSUES ===================== -->
+<section id="permission-issues">
+  <h2>Permission Issues</h2>
+  <div class="section-body">
+    {% if analysis.permission_issues %}
+    <table id="perm-table">
+      <thead><tr>
+        <th onclick="sortTable('perm-table', 0)">Path</th>
+        <th onclick="sortTable('perm-table', 1)">Permissions</th>
+        <th onclick="sortTable('perm-table', 2)">Issue</th>
+      </tr></thead>
+      <tbody>
+        {% for f in analysis.permission_issues %}
+        <tr>
+          <td>{{ f.path }}</td>
+          <td><code>{{ f.permissions }}</code></td>
+          <td><span class="badge badge-danger">{{ f.issue }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No permission issues found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== EMPTY DIRS ===================== -->
+<section id="empty-dirs">
+  <h2>Empty Directories</h2>
+  <div class="section-body">
+    {% if analysis.empty_directories %}
+    <table id="empty-dirs-table">
+      <thead><tr>
+        <th onclick="sortTable('empty-dirs-table', 0)">Path</th>
+        <th onclick="sortTable('empty-dirs-table', 1)">Depth</th>
+      </tr></thead>
+      <tbody>
+        {% for d in analysis.empty_directories %}
+        <tr>
+          <td>{{ d.path }}</td>
+          <td>{{ d.depth }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="notice">No empty directories found.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ===================== TIMELINE ===================== -->
+<section id="timeline">
+  <h2>File Activity Timeline (by modification month)</h2>
+  <div class="section-body">
+    {% if analysis.timeline %}
+    {% set max_tl = analysis.timeline.values() | max %}
+    <div class="bar-chart">
+      {% for month, count in analysis.timeline.items() | sort %}
+      <div class="bar-row">
+        <span class="bar-label">{{ month }}</span>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ (count / max_tl * 100) | round(1) if max_tl > 0 else 0 }}%;"></div></div>
+        <span class="bar-val">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="notice">No timeline data available.</p>
+    {% endif %}
+  </div>
+</section>
+
+</div><!-- /container -->
+
+<script>
+function sortTable(tableId, colIndex) {
+  var table = document.getElementById(tableId);
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+  var asc = table.dataset.sortCol == colIndex && table.dataset.sortDir !== 'asc';
+  table.dataset.sortCol = colIndex;
+  table.dataset.sortDir = asc ? 'asc' : 'desc';
+  rows.sort(function(a, b) {
+    var aText = (a.cells[colIndex] ? a.cells[colIndex].innerText : '').trim();
+    var bText = (b.cells[colIndex] ? b.cells[colIndex].innerText : '').trim();
+    var aNum = parseFloat(aText);
+    var bNum = parseFloat(bText);
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      return asc ? aNum - bNum : bNum - aNum;
+    }
+    return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+  });
+  rows.forEach(function(r) { tbody.appendChild(r); });
+}
+</script>
+</body>
+</html>

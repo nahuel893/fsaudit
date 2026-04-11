@@ -1,6 +1,6 @@
 [project]
 name = "fsaudit"
-version = "0.2.0"
+version = "0.6.0"
 description = "Filesystem audit tool — scan, classify, analyze, and report on directory contents"
 authors = [{name = "Nahuel Aguirre", email = "nahuel893@hotmail.com"}]
 license = {text = "MIT"}
@@ -26,6 +26,7 @@ dependencies = [
     "openpyxl>=3.1",
     "Jinja2>=3.1",
     "PyYAML>=6.0",
+    "rich>=13.0",
 ]
 
 [project.urls]
@@ -34,13 +35,16 @@ Repository = "https://github.com/nahuel893/fsaudit"
 Issues = "https://github.com/nahuel893/fsaudit/issues"
 
 [project.optional-dependencies]
+tui = ["textual>=0.80,<1.0"]
 dev = [
     "pytest>=7.0",
+    "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
 ]
 
 [project.scripts]
 fsaudit = "fsaudit.cli:main"
+fsaudit-tui = "fsaudit.tui.app:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -50,4 +54,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-fsaudit = ["classifier/categories.yaml"]
+fsaudit = ["classifier/categories.yaml", "reporter/templates/*.html", "tui/app.tcss"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
