@@ -663,3 +663,50 @@ class TestInventarioMB:
             assert isinstance(val, (int, float)), f"Row {row} size not numeric: {val}"
 
         wb.close()
+
+
+# ---------------------------------------------------------------------------
+# Task file-author-metadata: "Autor" column in Inventario Completo
+# ---------------------------------------------------------------------------
+
+class TestInventarioAutorColumn:
+    """Tests for the Autor column in the Inventario Completo sheet."""
+
+    def test_inventario_has_autor_header(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        """Column 13 (M) header is 'Autor'."""
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Inventario Completo"]
+        assert ws.cell(row=1, column=13).value == "Autor"
+        wb.close()
+
+    def test_inventario_author_value(
+        self, tmp_path: Path, sample_analysis: AnalysisResult
+    ) -> None:
+        """A record with author='Alice' has 'Alice' in the Autor column."""
+        from dataclasses import replace as dc_replace
+        rec = _make_record("doc.docx", ".docx", 1000, "Oficina", "/tmp/a")
+        rec_with_author = dc_replace(rec, author="Alice")
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate([rec_with_author], sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Inventario Completo"]
+        assert ws.cell(row=2, column=13).value == "Alice"
+        wb.close()
+
+    def test_inventario_author_none_empty(
+        self, tmp_path: Path, sample_analysis: AnalysisResult
+    ) -> None:
+        """A record with author=None has empty string in the Autor column."""
+        rec = _make_record("file.txt", ".txt", 100, "Texto", "/tmp/a")
+        # author is None by default
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate([rec], sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Inventario Completo"]
+        val = ws.cell(row=2, column=13).value
+        assert val == "" or val is None
+        wb.close()

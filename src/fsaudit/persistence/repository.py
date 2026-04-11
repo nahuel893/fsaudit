@@ -141,12 +141,13 @@ def save_file_records(
             r.mtime.timestamp() if isinstance(r.mtime, datetime) else float(r.mtime),
             r.category,
             getattr(r, "sha256", None),
+            getattr(r, "author", None),
         )
         for r in records
     ]
     conn.executemany(
-        """INSERT INTO file_records (run_id, path, name, extension, size_bytes, mtime, category, sha256)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO file_records (run_id, path, name, extension, size_bytes, mtime, category, sha256, author)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     )
     conn.commit()

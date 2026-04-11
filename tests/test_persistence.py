@@ -364,3 +364,114 @@ class TestFileRecords:
 
         with pytest.raises(ValueError, match="[Ss]elect"):
             execute_query(conn, "DELETE FROM runs")
+
+
+# ---------------------------------------------------------------------------
+# Task file-author-metadata: migration v3 + author column in file_records
+# ---------------------------------------------------------------------------
+
+def _make_file_record(author: str | None = None):
+    """Build a minimal FileRecord for persistence tests."""
+    from datetime import datetime
+    from pathlib import Path
+    from fsaudit.scanner.models import FileRecord
+
+    return FileRecord(
+        path=Path("/tmp/test.docx"),
+        name="test.docx",
+        extension=".docx",
+        size_bytes=1000,
+        mtime=datetime(2025, 1, 1),
+        creation_time=datetime(2025, 1, 1),
+        atime=datetime(2025, 1, 1),
+        depth=0,
+        is_hidden=False,
+        permissions="644",
+        author=author,
+    )
+
+
+class TestSchemaV3:
+    """Tests for migration v3 — author column in file_records."""
+
+    def test_schema_v3_has_author_column(self) -> None:
+        """Fresh DB after migration has 'author' column in file_records."""
+        import sqlite3
+        from fsaudit.persistence.schema import apply_migrations
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(conn)
+
+        cols = [
+            row[1]
+            for row in conn.execute("PRAGMA table_info(file_records)").fetchall()
+        ]
+        assert "author" in cols
+
+    def test_migration_v2_to_v3(self) -> None:
+        """A DB at schema v2 gets author column after ensure_schema."""
+        import sqlite3
+        from fsaudit.persistence.schema import (
+            MIGRATIONS,
+            ensure_schema,
+            get_schema_version,
+        )
+
+        conn = sqlite3.connect(":memory:")
+
+        # Apply only migrations 1 and 2 manually
+        for version in [1, 2]:
+            for statement in MIGRATIONS[version]:
+                conn.execute(statement)
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)")
+        conn.commit()
+
+        assert get_schema_version(conn) == 2
+
+        # Now apply remaining migrations
+        ensure_schema(conn)
+
+        cols = [
+            row[1]
+            for row in conn.execute("PRAGMA table_info(file_records)").fetchall()
+        ]
+        assert "author" in cols
+        assert get_schema_version(conn) == 3
+
+    def test_save_file_records_with_author(self) -> None:
+        """save_file_records with author='Carol' persists the value."""
+        import sqlite3
+        from fsaudit.persistence.schema import apply_migrations
+        from fsaudit.persistence.repository import save_run, save_file_records
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(conn)
+
+        run_id = save_run(conn, "/tmp", _make_analysis())
+        rec = _make_file_record(author="Carol")
+        save_file_records(conn, run_id, [rec])
+
+        row = conn.execute(
+            "SELECT author FROM file_records WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "Carol"
+
+    def test_save_file_records_author_none(self) -> None:
+        """save_file_records with author=None stores NULL in DB."""
+        import sqlite3
+        from fsaudit.persistence.schema import apply_migrations
+        from fsaudit.persistence.repository import save_run, save_file_records
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(conn)
+
+        run_id = save_run(conn, "/tmp", _make_analysis())
+        rec = _make_file_record(author=None)
+        save_file_records(conn, run_id, [rec])
+
+        row = conn.execute(
+            "SELECT author FROM file_records WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] is None

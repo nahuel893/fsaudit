@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -36,6 +36,9 @@ MIGRATIONS: dict[int, list[str]] = {
             sha256      TEXT
         )""",
         """CREATE INDEX IF NOT EXISTS idx_file_records_run_id ON file_records(run_id)""",
+    ],
+    3: [
+        """ALTER TABLE file_records ADD COLUMN author TEXT""",
     ],
 }
 

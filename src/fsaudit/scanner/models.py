@@ -25,6 +25,7 @@ class FileRecord:
     permissions: Optional[str]  # octal string e.g. "755", None on Windows
     category: str = "Unclassified"  # set by Classifier
     parent_dir: str = ""  # str(path.parent)
+    author: str | None = None  # extracted by enricher
 
 
 @dataclass(frozen=True)

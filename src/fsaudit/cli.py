@@ -133,6 +133,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Execute a SELECT query against the history database and print results.",
     )
+    parser.add_argument(
+        "--extract-author",
+        action="store_true",
+        default=False,
+        help="Extract author metadata from supported document formats (.docx, .xlsx, .pptx, .odt, .ods, .odp, .pdf). Slower on large directories. May expose PII.",
+    )
     return parser
 
 
@@ -218,6 +224,13 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
         # --- 3. Min-size filter ---
         if args.min_size > 0:
             classified = [f for f in classified if f.size_bytes >= args.min_size]
+
+        # --- 3b. Author extraction (optional) ---
+        if args.extract_author:
+            from fsaudit.enricher import enrich_authors
+            console.print("Extracting author metadata ...")
+            with console.status(""):
+                classified = enrich_authors(classified)
 
         # --- 4. Analyze ---
         console.print("Analyzing ...")

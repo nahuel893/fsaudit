@@ -86,6 +86,85 @@ class TestFileRecord:
         )
         assert rec.category == "Unclassified"
 
+    def test_file_record_author_default_none(self) -> None:
+        """author defaults to None when not provided (12-kwarg construction)."""
+        rec = FileRecord(
+            path=Path("/tmp/project/readme.md"),
+            name="readme.md",
+            extension=".md",
+            size_bytes=1024,
+            mtime=datetime(2025, 1, 15, 10, 30, 0),
+            creation_time=datetime(2025, 1, 10, 8, 0, 0),
+            atime=datetime(2025, 1, 20, 14, 0, 0),
+            depth=1,
+            is_hidden=False,
+            permissions="644",
+            category="Codigo",
+            parent_dir="/tmp/project",
+        )
+        assert rec.author is None
+
+    def test_file_record_author_explicit(self) -> None:
+        """author can be set explicitly."""
+        rec = FileRecord(
+            path=Path("/tmp/project/readme.md"),
+            name="readme.md",
+            extension=".md",
+            size_bytes=1024,
+            mtime=datetime(2025, 1, 15, 10, 30, 0),
+            creation_time=datetime(2025, 1, 10, 8, 0, 0),
+            atime=datetime(2025, 1, 20, 14, 0, 0),
+            depth=1,
+            is_hidden=False,
+            permissions="644",
+            author="Alice",
+        )
+        assert rec.author == "Alice"
+
+    def test_file_record_replace_preserves_author(self) -> None:
+        """dataclasses.replace(category=...) keeps existing author value."""
+        import dataclasses
+        rec = FileRecord(
+            path=Path("/tmp/project/readme.md"),
+            name="readme.md",
+            extension=".md",
+            size_bytes=1024,
+            mtime=datetime(2025, 1, 15, 10, 30, 0),
+            creation_time=datetime(2025, 1, 10, 8, 0, 0),
+            atime=datetime(2025, 1, 20, 14, 0, 0),
+            depth=1,
+            is_hidden=False,
+            permissions="644",
+            author="Alice",
+        )
+        updated = dataclasses.replace(rec, category="Documentos")
+        assert updated.author == "Alice"
+        assert updated.category == "Documentos"
+
+    def test_file_record_replace_sets_author(self) -> None:
+        """dataclasses.replace(author=...) updates the author field."""
+        import dataclasses
+        rec = FileRecord(
+            path=Path("/tmp/project/readme.md"),
+            name="readme.md",
+            extension=".md",
+            size_bytes=1024,
+            mtime=datetime(2025, 1, 15, 10, 30, 0),
+            creation_time=datetime(2025, 1, 10, 8, 0, 0),
+            atime=datetime(2025, 1, 20, 14, 0, 0),
+            depth=1,
+            is_hidden=False,
+            permissions="644",
+        )
+        updated = dataclasses.replace(rec, author="Bob")
+        assert updated.author == "Bob"
+
+    def test_file_record_author_frozen(self, sample_file_record: FileRecord) -> None:
+        """Assignment to author raises FrozenInstanceError."""
+        import dataclasses
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            sample_file_record.author = "Eve"  # type: ignore[misc]
+
 
 # ---------------------------------------------------------------------------
 # DirectoryRecord

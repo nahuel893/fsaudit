@@ -425,3 +425,62 @@ class TestQueryFlags:
             "--db", str(db_path),
         ])
         assert result == 1
+
+
+# ---------------------------------------------------------------------------
+# Task file-author-metadata: --extract-author flag
+# ---------------------------------------------------------------------------
+
+class TestExtractAuthorFlag:
+    """Tests for --extract-author CLI flag."""
+
+    def test_cli_extract_author_flag_accepted(self) -> None:
+        """Parser accepts --extract-author as a boolean store_true flag."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp", "--extract-author"])
+        assert args.extract_author is True
+
+    def test_cli_extract_author_default_false(self) -> None:
+        """--extract-author defaults to False when not provided."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp"])
+        assert args.extract_author is False
+
+    def test_cli_extract_author_calls_enricher(self, tmp_path: Path) -> None:
+        """When --extract-author is given, enrich_authors() is called."""
+        from unittest.mock import patch, MagicMock
+        from fsaudit.analyzer.metrics import AnalysisResult
+
+        dummy_result = AnalysisResult()
+
+        with patch("fsaudit.cli.analyze", return_value=dummy_result), \
+             patch("fsaudit.cli.ExcelReporter") as mock_reporter, \
+             patch("fsaudit.enricher.enrich_authors", return_value=[]) as mock_enrich:
+            mock_reporter.return_value.generate.return_value = None
+            result = main([
+                "--path", str(tmp_path),
+                "--output-dir", str(tmp_path),
+                "--extract-author",
+            ])
+
+        assert result == 0
+        mock_enrich.assert_called_once()
+
+    def test_cli_no_extract_author_skips_enricher(self, tmp_path: Path) -> None:
+        """When --extract-author is absent, enrich_authors() is NOT called."""
+        from unittest.mock import patch, MagicMock
+        from fsaudit.analyzer.metrics import AnalysisResult
+
+        dummy_result = AnalysisResult()
+
+        with patch("fsaudit.cli.analyze", return_value=dummy_result), \
+             patch("fsaudit.cli.ExcelReporter") as mock_reporter, \
+             patch("fsaudit.enricher.enrich_authors") as mock_enrich:
+            mock_reporter.return_value.generate.return_value = None
+            result = main([
+                "--path", str(tmp_path),
+                "--output-dir", str(tmp_path),
+            ])
+
+        assert result == 0
+        mock_enrich.assert_not_called()

@@ -432,6 +432,7 @@ class ExcelReporter(BaseReporter):
             "Oculto",
             "Permisos",
             "Directorio Padre",
+            "Autor",
         ]
         ws.append(headers)
 
@@ -449,6 +450,7 @@ class ExcelReporter(BaseReporter):
                 rec.is_hidden,
                 rec.permissions or "",
                 rec.parent_dir,
+                rec.author or "",
             ])
 
         # Autofilter spanning all columns
