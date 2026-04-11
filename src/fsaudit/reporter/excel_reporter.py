@@ -214,8 +214,41 @@ class ExcelReporter(BaseReporter):
             ws.cell(row=current_row, column=2, value=count)
             current_row += 1
 
+        # Timeline chart on dashboard
+        current_row += 1
+        ws.cell(row=current_row, column=1, value="Timeline de Archivos").font = section_font
+        current_row += 1
+
+        sorted_periods = sorted(analysis.timeline.keys())
+        if sorted_periods:
+            # Write mini timeline data table for the chart
+            ws.cell(row=current_row, column=1, value="Período").font = label_font
+            ws.cell(row=current_row, column=2, value="Cantidad").font = label_font
+            data_start_row = current_row + 1
+            for period in sorted_periods:
+                current_row += 1
+                ws.cell(row=current_row, column=1, value=period)
+                ws.cell(row=current_row, column=2, value=analysis.timeline[period])
+
+            # Add LineChart if enough data points
+            if len(sorted_periods) >= 2:
+                chart = LineChart()
+                chart.title = "Archivos por Período"
+                chart.y_axis.title = "Cantidad"
+                chart.x_axis.title = "Período"
+                chart.style = 10
+
+                data = Reference(ws, min_col=2, min_row=data_start_row - 1, max_row=current_row)
+                cats = Reference(ws, min_col=1, min_row=data_start_row, max_row=current_row)
+                chart.add_data(data, titles_from_data=True)
+                chart.set_categories(cats)
+                chart.width = 20
+                chart.height = 12
+
+                current_row += 1
+                ws.add_chart(chart, f"A{current_row}")
+
         # Apply header style and column width
-        # Style row 1 as header
         ws.freeze_panes = "A2"
         self._auto_column_width(ws)
 

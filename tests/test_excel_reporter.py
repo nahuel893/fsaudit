@@ -294,6 +294,43 @@ class TestDashboard:
 
         wb.close()
 
+    def test_dashboard_has_timeline_chart(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Dashboard"]
+
+        # Find "Timeline de Archivos" section header
+        found_section = False
+        for row in range(1, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == "Timeline de Archivos":
+                found_section = True
+                break
+        assert found_section, "Timeline section not found on Dashboard"
+
+        # Dashboard should have a chart embedded
+        assert len(ws._charts) >= 1, "No chart found on Dashboard sheet"
+
+        wb.close()
+
+    def test_dashboard_timeline_data_present(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        ws = wb["Dashboard"]
+
+        # Find timeline data rows — should contain the period values
+        all_values = [ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)]
+        assert "2024-12" in all_values
+        assert "2025-01" in all_values
+        assert "2025-06" in all_values
+
+        wb.close()
+
 
 # ---------------------------------------------------------------------------
 # 5.7 Por Categoria rows
