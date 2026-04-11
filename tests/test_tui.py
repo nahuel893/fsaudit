@@ -97,9 +97,7 @@ async def test_folder_selector_screen_renders():
 async def test_folder_selector_has_directory_tree():
     """FolderSelectorScreen must contain a DirectoryTree widget."""
     from textual.app import App
-    from textual.widgets import DirectoryTree
-
-    from fsaudit.tui.screens.folder_selector import FolderSelectorScreen
+    from fsaudit.tui.screens.folder_selector import FolderSelectorScreen, FilterableDirectoryTree
 
     class TestApp(App):
         def on_mount(self) -> None:
@@ -107,9 +105,8 @@ async def test_folder_selector_has_directory_tree():
 
     async with TestApp().run_test(headless=True) as pilot:
         await pilot.pause()
-        # Query from the current active screen (the pushed FolderSelectorScreen)
         screen = pilot.app.screen
-        tree = screen.query_one(DirectoryTree)
+        tree = screen.query_one(FilterableDirectoryTree)
         assert tree is not None
 
 
