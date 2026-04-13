@@ -91,9 +91,9 @@ def sample_analysis() -> AnalysisResult:
         },
     }
     ar.timeline = {
-        "2025-06": 3,
-        "2024-12": 1,
-        "2025-01": 1,
+        "2025-06-01": 3,
+        "2024-12-01": 1,
+        "2025-01-01": 1,
     }
     ar.top_largest = [
         {"path": "/tmp/b/photo.jpg", "size_bytes": 5_000_000, "category": "Multimedia", "mtime": datetime(2025, 6, 15)},
@@ -418,9 +418,9 @@ class TestDashboard:
 
         # Timeline data is in col E — find the period values
         all_col_e = [ws.cell(row=r, column=5).value for r in range(1, ws.max_row + 1)]
-        assert "2024-12" in all_col_e
-        assert "2025-01" in all_col_e
-        assert "2025-06" in all_col_e
+        assert "2024-12-01" in all_col_e
+        assert "2025-01-01" in all_col_e
+        assert "2025-06-01" in all_col_e
         wb.close()
 
 
@@ -482,7 +482,7 @@ class TestTimelineSort:
                 periods.append(val)
 
         assert periods == sorted(periods)
-        assert periods == ["2024-12", "2025-01", "2025-06"]
+        assert periods == ["2024-12-01", "2025-01-01", "2025-06-01"]
         wb.close()
 
 
@@ -758,7 +758,7 @@ class TestTimelineChart:
     def test_no_chart_on_single_period(self, tmp_path: Path) -> None:
         """Timeline with only 1 period should have no chart."""
         ar = AnalysisResult()
-        ar.timeline = {"2025-01": 5}
+        ar.timeline = {"2025-01-01": 5}
         out = tmp_path / "single.xlsx"
         ExcelReporter().generate([], ar, out)
         wb = load_workbook(out)

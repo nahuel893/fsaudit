@@ -101,7 +101,7 @@ def _compute_timeline(records: list[FileRecord]) -> dict[str, int]:
     """RF-15: Monthly file count distribution by mtime."""
     counter: Counter[str] = Counter()
     for r in records:
-        key = r.mtime.strftime("%Y-%m")
+        key = r.mtime.strftime("%Y-%m-01")
         counter[key] += 1
     return dict(counter)
 

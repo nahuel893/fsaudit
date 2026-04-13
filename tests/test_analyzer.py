@@ -126,9 +126,9 @@ class TestTimeline:
             _make_record(mtime=datetime(2024, 3, 10)),
         ]
         result = analyze(files, _empty_scan(), _now=NOW)
-        assert result.timeline["2024-01"] == 2
-        assert result.timeline["2024-03"] == 1
-        assert "2024-02" not in result.timeline
+        assert result.timeline["2024-01-01"] == 2
+        assert result.timeline["2024-03-01"] == 1
+        assert "2024-02-01" not in result.timeline
 
 
 # ---------------------------------------------------------------------------
