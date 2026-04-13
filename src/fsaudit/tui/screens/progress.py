@@ -8,7 +8,8 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Label, ProgressBar, RichLog
+from textual.containers import Horizontal
+from textual.widgets import Button, Header, Label, ProgressBar, RichLog
 
 from fsaudit.analyzer.analyzer import analyze
 from fsaudit.classifier.classifier import classify
@@ -41,10 +42,10 @@ class ProgressScreen(Screen):
         yield ProgressBar(id="progress", total=100, show_eta=False)
         yield RichLog(id="log", highlight=True, markup=True, max_lines=50)
         yield Label("", id="lbl-error", classes="error")
-        yield Button("Back", id="btn-back", variant="default", disabled=True)
-        yield Button("Ver Resultados ↵", id="btn-continue", variant="primary", disabled=True)
-        yield Button("Salir", id="btn-quit", variant="error", disabled=True)
-        yield Footer()
+        with Horizontal(id="action-bar"):
+            yield Button("Back", id="btn-back", variant="default", disabled=True)
+            yield Button("Ver Resultados ↵", id="btn-continue", variant="primary", disabled=True)
+            yield Button("Salir", id="btn-quit", variant="error", disabled=True)
 
     def on_mount(self) -> None:
         self.title = "fsaudit - Running Audit"
