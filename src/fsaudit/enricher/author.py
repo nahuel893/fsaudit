@@ -106,9 +106,15 @@ _EXTENSION_EXTRACTORS: dict[str, Callable[[str], str | None]] = {
 # ---------------------------------------------------------------------------
 
 def _safe_extract(extractor: Callable[[str], str | None], path: str) -> str | None:
-    """Call extractor and return None on any exception (logged at DEBUG)."""
+    """Call extractor and return None on any exception."""
     try:
         return extractor(path)
+    except PermissionError:
+        logger.warning("Permission denied reading metadata: %s", path)
+        return None
+    except zipfile.BadZipFile:
+        logger.debug("Not a valid ZIP (may be locked by another app): %s", path)
+        return None
     except Exception:
         logger.debug("Failed to extract author from %s", path, exc_info=True)
         return None
