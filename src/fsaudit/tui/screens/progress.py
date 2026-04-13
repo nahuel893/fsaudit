@@ -38,14 +38,14 @@ class ProgressScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Label("Starting audit…", id="lbl-phase")
-        yield Label("", id="lbl-file-count")
-        yield ProgressBar(id="progress", total=100, show_eta=False)
-        yield RichLog(id="log", highlight=True, markup=True, max_lines=50)
-        yield Label("", id="lbl-error", classes="error")
         with Horizontal(id="action-bar"):
             yield Button("Back", id="btn-back", variant="default", disabled=True)
             yield Button("Ver Resultados ↵", id="btn-continue", variant="primary", disabled=True)
             yield Button("Salir", id="btn-quit", variant="error", disabled=True)
+        yield Label("", id="lbl-file-count")
+        yield ProgressBar(id="progress", total=100, show_eta=False)
+        yield RichLog(id="log", highlight=True, markup=True, max_lines=50)
+        yield Label("", id="lbl-error", classes="error")
 
     def on_mount(self) -> None:
         self.title = "fsaudit - Running Audit"
