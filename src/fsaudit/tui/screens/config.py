@@ -50,6 +50,8 @@ class ConfigScreen(Screen):
         yield Switch(id="switch-hash-dup", value=False)
         yield Label("Extract author from documents (.docx, .pdf, etc.):", classes="field-label")
         yield Switch(id="switch-extract-author", value=True)
+        yield Label("Hide time from dates (show only YYYY-MM-DD):", classes="field-label")
+        yield Switch(id="switch-strip-time", value=True)
         yield Label("", id="lbl-error", classes="error")
         yield Button("Start Audit", id="btn-start", variant="primary")
         yield Button("Back", id="btn-back", variant="default")
@@ -118,6 +120,9 @@ class ConfigScreen(Screen):
         # Extract author
         extract_author = self.query_one("#switch-extract-author", Switch).value
 
+        # Strip time
+        strip_time = self.query_one("#switch-strip-time", Switch).value
+
         error_label.update("")
         self.dismiss(
             ScanConfig(
@@ -129,5 +134,6 @@ class ConfigScreen(Screen):
                 format=fmt,
                 hash_duplicates=hash_dup,
                 extract_author=extract_author,
+                strip_time=strip_time,
             )
         )

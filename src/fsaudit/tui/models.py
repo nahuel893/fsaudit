@@ -29,4 +29,5 @@ class ScanConfig:
     format: str = "excel"
     hash_duplicates: bool = False
     extract_author: bool = True
+    strip_time: bool = True
     output_dir: Path = field(default_factory=_default_output_dir)

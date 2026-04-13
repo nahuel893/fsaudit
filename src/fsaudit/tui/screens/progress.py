@@ -142,6 +142,19 @@ class ProgressScreen(Screen):
             from fsaudit.enricher import enrich_authors
             classified = enrich_authors(classified)
 
+        # 5. Strip time from dates (if configured)
+        if getattr(cfg, "strip_time", False):
+            from dataclasses import replace
+            classified = [
+                replace(
+                    r,
+                    mtime=r.mtime.replace(hour=0, minute=0, second=0, microsecond=0),
+                    creation_time=r.creation_time.replace(hour=0, minute=0, second=0, microsecond=0),
+                    atime=r.atime.replace(hour=0, minute=0, second=0, microsecond=0),
+                )
+                for r in classified
+            ]
+
         def _classify_done() -> None:
             try:
                 bar = self.query_one("#progress", ProgressBar)
