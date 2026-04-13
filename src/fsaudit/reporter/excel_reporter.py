@@ -88,7 +88,7 @@ class ExcelReporter(BaseReporter):
     @staticmethod
     def _bytes_to_mb(size_bytes: int) -> float:
         """Convert bytes to MB, rounded to 2 decimals."""
-        return round(size_bytes / (1024 * 1024), 2)
+        return size_bytes / (1024 * 1024)
 
     @staticmethod
     def _format_bytes(size_bytes: int) -> str:
