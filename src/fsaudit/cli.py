@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import platform
 import sqlite3
 import sys
 from datetime import datetime
@@ -27,6 +28,16 @@ from fsaudit.shortcut import create_shortcut
 logger = logging.getLogger("fsaudit.cli")
 
 _DEFAULT_DB = Path.home() / ".fsaudit" / "audits.db"
+
+
+def _default_output_dir() -> Path:
+    """Default export directory: Desktop on Windows, Home on Linux/macOS."""
+    if platform.system() == "Windows":
+        desktop = Path.home() / "Desktop"
+        if not desktop.exists():
+            desktop = Path.home() / "OneDrive" / "Desktop"
+        return desktop if desktop.exists() else Path.home()
+    return Path.home()
 
 _VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
@@ -51,8 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-dir",
-        default=".",
-        help="Directory for the output report (default: current directory).",
+        default=None,
+        help="Directory for the output report (default: Desktop on Windows, Home on Linux).",
     )
     parser.add_argument(
         "--depth",
@@ -193,7 +204,7 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
         )
         return 1
 
-    output_dir = Path(args.output_dir).resolve()
+    output_dir = Path(args.output_dir).resolve() if args.output_dir else _default_output_dir()
     if not output_dir.is_dir():
         Console(file=sys.stderr, highlight=False).print(
             f"Error: '{args.output_dir}' does not exist or is not a directory."

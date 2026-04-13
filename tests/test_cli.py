@@ -26,7 +26,7 @@ class TestBuildParser:
         parser = build_parser()
         args = parser.parse_args(["--path", "/tmp"])
         assert args.path == "/tmp"
-        assert args.output_dir == "."
+        assert args.output_dir is None
         assert args.depth is None
         assert args.exclude == []
         assert args.min_size == 0
@@ -111,14 +111,14 @@ class TestMainHappyPath:
         assert output_file.exists()
         assert output_file.suffix == ".xlsx"
 
-    def test_default_output_dir(self, tmp_tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When --output-dir is omitted, report goes to cwd."""
-        monkeypatch.chdir(tmp_tree)
+    def test_default_output_dir(self, tmp_tree: Path) -> None:
+        """When --output-dir is omitted, report goes to Home (Linux) or Desktop (Windows)."""
         result = main(["--path", str(tmp_tree)])
         assert result == 0
         date_str = datetime.now().strftime("%Y-%m-%d")
         expected_name = f"{tmp_tree.name}_audit_{date_str}.xlsx"
-        assert (tmp_tree / expected_name).exists()
+        from fsaudit.cli import _default_output_dir
+        assert (_default_output_dir() / expected_name).exists()
 
     def test_progress_messages(self, tmp_tree: Path, capsys: pytest.CaptureFixture[str]) -> None:
         main(["--path", str(tmp_tree), "--output-dir", str(tmp_tree)])

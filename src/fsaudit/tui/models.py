@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _default_output_dir() -> Path:
+    """Default export directory: Desktop on Windows, Home on Linux/macOS."""
+    if platform.system() == "Windows":
+        desktop = Path.home() / "Desktop"
+        if not desktop.exists():
+            desktop = Path.home() / "OneDrive" / "Desktop"
+        return desktop if desktop.exists() else Path.home()
+    return Path.home()
 
 
 @dataclass
@@ -18,4 +29,4 @@ class ScanConfig:
     format: str = "excel"
     hash_duplicates: bool = False
     extract_author: bool = False
-    output_dir: Path = field(default_factory=Path.cwd)
+    output_dir: Path = field(default_factory=_default_output_dir)
