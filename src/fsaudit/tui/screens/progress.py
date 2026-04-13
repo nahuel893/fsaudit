@@ -32,6 +32,7 @@ class ProgressScreen(Screen):
         self._last_update: float = 0.0
         self._last_path: str = ""
         self._finished = False
+        self._worker_result: dict | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -41,6 +42,8 @@ class ProgressScreen(Screen):
         yield RichLog(id="log", highlight=True, markup=True, max_lines=50)
         yield Label("", id="lbl-error", classes="error")
         yield Button("Back", id="btn-back", variant="default", disabled=True)
+        yield Button("Ver Resultados ↵", id="btn-continue", variant="primary", disabled=True)
+        yield Button("Salir", id="btn-quit", variant="error", disabled=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -53,6 +56,10 @@ class ProgressScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-back":
             self.app.pop_screen()
+        elif event.button.id == "btn-continue":
+            self.dismiss(self._worker_result)
+        elif event.button.id == "btn-quit":
+            self.app.exit()
 
     # ------------------------------------------------------------------
     # Worker
@@ -197,8 +204,27 @@ class ProgressScreen(Screen):
         }
 
     def on_worker_success(self, event) -> None:
-        """Worker completed successfully — dismiss after a brief pause for UI to update."""
-        self.set_timer(0.3, lambda: self.dismiss(event.worker.result))
+        """Worker completed — show completion message and wait for user action."""
+        self._worker_result = event.worker.result
+        report_path = event.worker.result.get("report_path", "")
+        total = event.worker.result.get("analysis")
+        files = total.total_files if total else 0
+        score = f"{total.health_score:.1f}" if total else "?"
+
+        self.query_one("#lbl-phase", Label).update(
+            f"[bold green]Audit complete![/bold green]  "
+            f"Files: {files:,} | Health: {score}/100"
+        )
+        self.query_one("#log", RichLog).write(
+            f"\n[bold]Report saved:[/bold] {report_path}"
+        )
+
+        # Show action buttons
+        btn_continue = self.query_one("#btn-continue", Button)
+        btn_continue.disabled = False
+        btn_quit = self.query_one("#btn-quit", Button)
+        btn_quit.disabled = False
+        btn_continue.focus()
 
     def on_worker_error(self, event) -> None:
         """Worker failed — show error and enable back button."""
