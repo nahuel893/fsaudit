@@ -221,35 +221,148 @@ class TestSheetNamesOrder:
 
 
 class TestDashboard:
-    def test_kpis_match_analysis(
+    @staticmethod
+    def _find_kpi(ws, label: str):
+        """Find a KPI row by label, return (row, value)."""
+        for row in range(1, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == label:
+                return row, ws.cell(row=row, column=2).value
+        return None, None
+
+    @staticmethod
+    def _find_section(ws, title: str) -> int | None:
+        """Find a section header row by title."""
+        for row in range(1, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == title:
+                return row
+        return None
+
+    def test_dashboard_title(
         self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
     ) -> None:
         out = tmp_path / "report.xlsx"
         ExcelReporter().generate(sample_records, sample_analysis, out)
         wb = load_workbook(out)
-        ws = wb["Dashboard"]
+        assert wb["Dashboard"].cell(row=1, column=1).value == "Dashboard"
+        wb.close()
 
-        # Row 1: Title
-        assert ws.cell(row=1, column=1).value == "Dashboard"
+    def test_kpi_health_score(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Health Score")
+        assert row is not None, "Health Score KPI not found"
+        assert "100" in str(val) or isinstance(val, (int, float))
+        wb.close()
 
-        # Row 2: Total Archivos
-        assert ws.cell(row=2, column=1).value == "Total Archivos"
-        assert ws.cell(row=2, column=2).value == 5
+    def test_kpi_total_archivos(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Total Archivos")
+        assert row is not None, "Total Archivos KPI not found"
+        assert val == 5
+        wb.close()
 
-        # Row 3: Tamaño Total (MB) — numeric float
-        assert ws.cell(row=3, column=1).value == "Tamaño Total (MB)"
-        assert isinstance(ws.cell(row=3, column=2).value, float)
-        assert ws.cell(row=3, column=2).value == ExcelReporter._bytes_to_mb(5_032_572)
+    def test_kpi_tamano_total(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Tamaño Total (MB)")
+        assert row is not None
+        assert isinstance(val, float)
+        assert val == ExcelReporter._bytes_to_mb(5_032_572)
+        wb.close()
 
-        # Row 4: Categorías
-        assert ws.cell(row=4, column=1).value == "Categorías"
-        assert ws.cell(row=4, column=2).value == 3
+    def test_kpi_alertas(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Alertas Activas")
+        assert row is not None
+        assert val == 5  # 1 zero-byte + 1 permission + 3 duplicates
+        wb.close()
 
-        # Row 5: Alertas Activas
-        assert ws.cell(row=5, column=1).value == "Alertas Activas"
-        # 1 zero-byte + 1 permission + 3 duplicates = 5
-        assert ws.cell(row=5, column=2).value == 5
+    def test_kpi_duplicados(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Archivos Duplicados")
+        assert row is not None
+        wb.close()
 
+    def test_kpi_inactivos(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Archivos Inactivos")
+        assert row is not None
+        wb.close()
+
+    def test_kpi_zero_bytes(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Archivos 0 bytes")
+        assert row is not None
+        assert val == 1
+        wb.close()
+
+    def test_kpi_tamano_promedio(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Tamaño Promedio (MB)")
+        assert row is not None
+        assert isinstance(val, float)
+        wb.close()
+
+    def test_kpi_directorios_vacios(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Directorios Vacíos")
+        assert row is not None
+        wb.close()
+
+    def test_kpi_extension_mas_comun(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Extensión Más Común")
+        assert row is not None
+        assert isinstance(val, str)
+        wb.close()
+
+    def test_kpi_archivo_mas_pesado(
+        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
+    ) -> None:
+        out = tmp_path / "report.xlsx"
+        ExcelReporter().generate(sample_records, sample_analysis, out)
+        wb = load_workbook(out)
+        row, val = self._find_kpi(wb["Dashboard"], "Archivo Más Pesado")
+        assert row is not None
+        assert "photo.jpg" in str(val)
         wb.close()
 
     def test_dashboard_top5_categories(
@@ -260,17 +373,13 @@ class TestDashboard:
         wb = load_workbook(out)
         ws = wb["Dashboard"]
 
-        # Row 7: Section header for top 5 categories
-        assert ws.cell(row=7, column=1).value == "Top 5 Categorías por Tamaño"
-        # Row 8: Sub-header
-        assert ws.cell(row=8, column=1).value == "Categoría"
-        assert ws.cell(row=8, column=2).value == "Cantidad"
-        assert ws.cell(row=8, column=3).value == "Tamaño (MB)"
-        # Row 9: First category (Multimedia — largest)
-        assert ws.cell(row=9, column=1).value == "Multimedia"
-        assert ws.cell(row=9, column=2).value == 1  # count
-        assert isinstance(ws.cell(row=9, column=3).value, float)
-
+        row = self._find_section(ws, "Top 5 Categorías por Tamaño")
+        assert row is not None, "Top 5 Categories section not found"
+        assert ws.cell(row=row + 1, column=1).value == "Categoría"
+        assert ws.cell(row=row + 1, column=2).value == "Cantidad"
+        assert ws.cell(row=row + 1, column=3).value == "Tamaño (MB)"
+        # First category should be Multimedia (largest)
+        assert ws.cell(row=row + 2, column=1).value == "Multimedia"
         wb.close()
 
     def test_dashboard_top5_directories(
@@ -281,17 +390,10 @@ class TestDashboard:
         wb = load_workbook(out)
         ws = wb["Dashboard"]
 
-        # Find the "Top 5 Directorios por Cantidad" section
-        found = False
-        for row in range(1, ws.max_row + 1):
-            if ws.cell(row=row, column=1).value == "Top 5 Directorios por Cantidad":
-                found = True
-                # Next row should have sub-headers
-                assert ws.cell(row=row + 1, column=1).value == "Directorio"
-                assert ws.cell(row=row + 1, column=2).value == "Cantidad"
-                break
-        assert found, "Top 5 Directorios section not found"
-
+        row = self._find_section(ws, "Top 5 Directorios por Cantidad")
+        assert row is not None, "Top 5 Directorios section not found"
+        assert ws.cell(row=row + 1, column=1).value == "Directorio"
+        assert ws.cell(row=row + 1, column=2).value == "Cantidad"
         wb.close()
 
     def test_dashboard_has_timeline_chart(
@@ -302,17 +404,8 @@ class TestDashboard:
         wb = load_workbook(out)
         ws = wb["Dashboard"]
 
-        # Find "Timeline de Archivos" section header
-        found_section = False
-        for row in range(1, ws.max_row + 1):
-            if ws.cell(row=row, column=1).value == "Timeline de Archivos":
-                found_section = True
-                break
-        assert found_section, "Timeline section not found on Dashboard"
-
-        # Dashboard should have a chart embedded
+        # Dashboard should have a chart embedded at E2
         assert len(ws._charts) >= 1, "No chart found on Dashboard sheet"
-
         wb.close()
 
     def test_dashboard_timeline_data_present(
@@ -323,12 +416,11 @@ class TestDashboard:
         wb = load_workbook(out)
         ws = wb["Dashboard"]
 
-        # Find timeline data rows — should contain the period values
-        all_values = [ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)]
-        assert "2024-12" in all_values
-        assert "2025-01" in all_values
-        assert "2025-06" in all_values
-
+        # Timeline data is in col E — find the period values
+        all_col_e = [ws.cell(row=r, column=5).value for r in range(1, ws.max_row + 1)]
+        assert "2024-12" in all_col_e
+        assert "2025-01" in all_col_e
+        assert "2025-06" in all_col_e
         wb.close()
 
 

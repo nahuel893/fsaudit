@@ -140,7 +140,13 @@ class ExcelReporter(BaseReporter):
         analysis: AnalysisResult,
         records: list[FileRecord],
     ) -> None:
-        """KPI overview sheet with professional layout."""
+        """KPI overview sheet with professional layout.
+
+        Layout:
+          Cols A-C: KPIs + tables (left panel)
+          Cols E-L: Timeline chart (right panel, immediately visible)
+          Below both: Top 5 Categories + Top 5 Directories
+        """
         title_font = Font(bold=True, size=14)
         section_font = Font(bold=True, size=12)
         value_font = Font(bold=True, size=14)
@@ -158,22 +164,85 @@ class ExcelReporter(BaseReporter):
             )
         )
 
+        # Health score
+        score = analysis.health_score
+        score_color = "00B050" if score >= 70 else "FFC000" if score >= 40 else "FF0000"
+
         # KPI rows (label col A, value col B)
         kpis = [
+            ("Health Score", f"{score:.1f} / 100"),
             ("Total Archivos", analysis.total_files),
             ("Tamaño Total (MB)", self._bytes_to_mb(analysis.total_size_bytes)),
             ("Categorías", len(analysis.by_category)),
             ("Alertas Activas", alert_count),
+            ("Archivos Duplicados", sum(len(p) for p in analysis.duplicates_by_name.values())),
+            ("Archivos Inactivos", f"{len(analysis.inactive_files)} ({round(len(analysis.inactive_files) / max(analysis.total_files, 1) * 100, 1)}%)"),
+            ("Archivos 0 bytes", len(analysis.zero_byte_files)),
+            ("Tamaño Promedio (MB)", self._bytes_to_mb(int(analysis.total_size_bytes / max(analysis.total_files, 1)))),
+            ("Directorios Vacíos", len(analysis.empty_directories)),
         ]
+
+        # Extension más común
+        ext_counts: dict[str, int] = defaultdict(int)
+        for rec in records:
+            ext_counts[rec.extension or "(sin ext)"] += 1
+        if ext_counts:
+            top_ext = max(ext_counts.items(), key=lambda x: x[1])
+            kpis.append(("Extensión Más Común", f"{top_ext[0]} ({top_ext[1]})"))
+
+        # Archivo más pesado
+        if analysis.top_largest:
+            biggest = analysis.top_largest[0]
+            biggest_name = Path(biggest.get("path", "")).name
+            biggest_mb = self._bytes_to_mb(biggest.get("size_bytes", 0))
+            kpis.append(("Archivo Más Pesado", f"{biggest_name} ({biggest_mb} MB)"))
+
         for i, (label, value) in enumerate(kpis, start=2):
             ws.cell(row=i, column=1, value=label).font = label_font
-            ws.cell(row=i, column=2, value=value).font = value_font
+            cell = ws.cell(row=i, column=2, value=value)
+            cell.font = value_font
+            # Color the health score value
+            if label == "Health Score":
+                cell.font = Font(bold=True, size=14, color=score_color)
 
-        # Blank row
-        current_row = len(kpis) + 2  # after KPIs + title
+        current_row = len(kpis) + 3  # after KPIs + title + blank
+
+        # --- Timeline chart placed to the RIGHT of KPIs (cols E-L, row 2) ---
+        sorted_periods = sorted(analysis.timeline.keys())
+        if sorted_periods:
+            # Write timeline data in a hidden area (cols E-F, starting at row 16+)
+            # far enough down that the chart covers them visually
+            tl_data_row = max(current_row + 20, 40)
+            ws.cell(row=tl_data_row, column=5, value="Período")
+            ws.cell(row=tl_data_row, column=6, value="Cantidad")
+            for idx, period in enumerate(sorted_periods):
+                ws.cell(row=tl_data_row + 1 + idx, column=5, value=period)
+                ws.cell(row=tl_data_row + 1 + idx, column=6, value=analysis.timeline[period])
+
+            if len(sorted_periods) >= 2:
+                chart = LineChart()
+                chart.title = "Archivos por Período"
+                chart.y_axis.title = "Cantidad"
+                chart.x_axis.title = "Período"
+                chart.style = 10
+
+                data = Reference(
+                    ws, min_col=6, min_row=tl_data_row,
+                    max_row=tl_data_row + len(sorted_periods),
+                )
+                cats = Reference(
+                    ws, min_col=5, min_row=tl_data_row + 1,
+                    max_row=tl_data_row + len(sorted_periods),
+                )
+                chart.add_data(data, titles_from_data=True)
+                chart.set_categories(cats)
+                chart.width = 22
+                chart.height = 14
+
+                # Place chart at E2 — right of KPIs, immediately visible
+                ws.add_chart(chart, "E2")
 
         # Top 5 Categorías por Tamaño section
-        current_row += 1
         ws.cell(row=current_row, column=1, value="Top 5 Categorías por Tamaño").font = section_font
         current_row += 1
         ws.cell(row=current_row, column=1, value="Categoría").font = label_font
@@ -181,7 +250,6 @@ class ExcelReporter(BaseReporter):
         ws.cell(row=current_row, column=3, value="Tamaño (MB)").font = label_font
         current_row += 1
 
-        # Sort categories by bytes descending, take top 5
         sorted_cats = sorted(
             analysis.by_category.items(),
             key=lambda x: x[1].get("bytes", 0),
@@ -193,7 +261,6 @@ class ExcelReporter(BaseReporter):
             ws.cell(row=current_row, column=3, value=self._bytes_to_mb(stats.get("bytes", 0)))
             current_row += 1
 
-        # Blank row
         current_row += 1
 
         # Top 5 Directorios por Cantidad section
@@ -203,7 +270,6 @@ class ExcelReporter(BaseReporter):
         ws.cell(row=current_row, column=2, value="Cantidad").font = label_font
         current_row += 1
 
-        # Compute dir stats from records
         dir_counts: dict[str, int] = defaultdict(int)
         for rec in records:
             dir_counts[rec.parent_dir] += 1
@@ -213,40 +279,6 @@ class ExcelReporter(BaseReporter):
             ws.cell(row=current_row, column=1, value=dirname)
             ws.cell(row=current_row, column=2, value=count)
             current_row += 1
-
-        # Timeline chart on dashboard
-        current_row += 1
-        ws.cell(row=current_row, column=1, value="Timeline de Archivos").font = section_font
-        current_row += 1
-
-        sorted_periods = sorted(analysis.timeline.keys())
-        if sorted_periods:
-            # Write mini timeline data table for the chart
-            ws.cell(row=current_row, column=1, value="Período").font = label_font
-            ws.cell(row=current_row, column=2, value="Cantidad").font = label_font
-            data_start_row = current_row + 1
-            for period in sorted_periods:
-                current_row += 1
-                ws.cell(row=current_row, column=1, value=period)
-                ws.cell(row=current_row, column=2, value=analysis.timeline[period])
-
-            # Add LineChart if enough data points
-            if len(sorted_periods) >= 2:
-                chart = LineChart()
-                chart.title = "Archivos por Período"
-                chart.y_axis.title = "Cantidad"
-                chart.x_axis.title = "Período"
-                chart.style = 10
-
-                data = Reference(ws, min_col=2, min_row=data_start_row - 1, max_row=current_row)
-                cats = Reference(ws, min_col=1, min_row=data_start_row, max_row=current_row)
-                chart.add_data(data, titles_from_data=True)
-                chart.set_categories(cats)
-                chart.width = 20
-                chart.height = 12
-
-                current_row += 1
-                ws.add_chart(chart, f"A{current_row}")
 
         # Apply header style and column width
         ws.freeze_panes = "A2"
