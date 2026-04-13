@@ -418,9 +418,9 @@ class TestDashboard:
 
         # Timeline data is in col E — find the period values
         all_col_e = [ws.cell(row=r, column=5).value for r in range(1, ws.max_row + 1)]
-        assert "2024-12-01" in all_col_e
-        assert "2025-01-01" in all_col_e
-        assert "2025-06-01" in all_col_e
+        assert datetime(2024, 12, 1) in all_col_e
+        assert datetime(2025, 1, 1) in all_col_e
+        assert datetime(2025, 6, 1) in all_col_e
         wb.close()
 
 
@@ -482,7 +482,7 @@ class TestTimelineSort:
                 periods.append(val)
 
         assert periods == sorted(periods)
-        assert periods == ["2024-12-01", "2025-01-01", "2025-06-01"]
+        assert periods == [datetime(2024, 12, 1), datetime(2025, 1, 1), datetime(2025, 6, 1)]
         wb.close()
 
 
