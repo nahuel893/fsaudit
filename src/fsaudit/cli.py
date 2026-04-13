@@ -18,12 +18,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from fsaudit import __version__
 from fsaudit.analyzer.analyzer import analyze
 from fsaudit.classifier.classifier import classify
 from fsaudit.logging_config import setup_logging
 from fsaudit.reporter.excel_reporter import ExcelReporter
 from fsaudit.scanner.scanner import FileScanner
 from fsaudit.shortcut import create_shortcut
+from fsaudit.updater import check_update, run_update
 
 logger = logging.getLogger("fsaudit.cli")
 
@@ -158,6 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Extract author metadata from supported document formats (.docx, .xlsx, .pptx, .odt, .ods, .odp, .pdf). Slower on large directories. May expose PII.",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        default=False,
+        help="Update fsaudit to the latest version from PyPI.",
+    )
     return parser
 
 
@@ -175,6 +183,19 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
 
     # --- Resolve db path ---
     db_path = Path(args.db) if args.db else _DEFAULT_DB
+
+    # --- --update: update fsaudit and exit ---
+    if getattr(args, "update", False):
+        success = run_update(console=console)
+        return 0 if success else 1
+
+    # --- Check for updates (non-blocking notification) ---
+    new_version = check_update()
+    if new_version:
+        console.print(
+            f"[yellow]New version available: {new_version} (current: {__version__})."
+            " Run 'fsaudit --update' to upgrade.[/yellow]"
+        )
 
     # --- --create-shortcut: create desktop shortcut and exit ---
     if getattr(args, "create_shortcut", False):

@@ -246,3 +246,30 @@ async def test_app_starts_with_folder_selector():
     async with FsauditApp().run_test(headless=True) as pilot:
         await pilot.pause()
         assert isinstance(pilot.app.screen, FolderSelectorScreen)
+
+
+# ---------------------------------------------------------------------------
+# Auto-update: TUI background worker
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_app_checks_for_update():
+    """FsauditApp.on_mount() starts a background worker to check for updates."""
+    from unittest.mock import patch, MagicMock
+    from fsaudit.tui.app import FsauditApp
+
+    worker_calls = []
+
+    def fake_check_update():
+        worker_calls.append(True)
+        return None  # no update available
+
+    with patch("fsaudit.updater.check_update", side_effect=fake_check_update):
+        async with FsauditApp().run_test(headless=True) as pilot:
+            await pilot.pause()
+            # Give the worker thread time to run
+            import asyncio
+            await asyncio.sleep(0.1)
+
+    assert len(worker_calls) >= 1, "check_update worker was never called"

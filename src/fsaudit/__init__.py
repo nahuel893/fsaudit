@@ -1,6 +1,6 @@
 """FSAudit — Filesystem audit tool."""
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 # Public API
 from fsaudit.api import AuditResult, audit, scan

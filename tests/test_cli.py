@@ -542,3 +542,80 @@ class TestCreateShortcutFlag:
 
         _, kwargs = mock_sc.call_args
         assert "console" in kwargs
+
+
+# ---------------------------------------------------------------------------
+# Auto-update: --update flag and update notification
+# ---------------------------------------------------------------------------
+
+
+class TestCliUpdateFlag:
+    """Tests for the --update flag and update notification."""
+
+    def test_cli_update_flag_accepted(self) -> None:
+        """--update flag is accepted by the parser without error."""
+        from unittest.mock import patch
+
+        with patch("fsaudit.cli.run_update", return_value=True):
+            result = main(["--update"])
+        assert result == 0
+
+    def test_cli_update_calls_run_update(self) -> None:
+        """main(["--update"]) calls run_update() exactly once."""
+        from io import StringIO
+        from unittest.mock import patch
+        from rich.console import Console
+
+        console = Console(file=StringIO(), highlight=False)
+
+        with patch("fsaudit.cli.run_update", return_value=True) as mock_update:
+            result = main(["--update"], _console=console)
+
+        mock_update.assert_called_once()
+        assert result == 0
+
+    def test_cli_update_returns_1_on_failure(self) -> None:
+        """main(["--update"]) returns 1 when run_update() returns False."""
+        from unittest.mock import patch
+
+        with patch("fsaudit.cli.run_update", return_value=False):
+            result = main(["--update"])
+        assert result == 1
+
+    def test_cli_update_flag_default_false(self) -> None:
+        """--update defaults to False in parser."""
+        parser = build_parser()
+        args = parser.parse_args(["--path", "/tmp"])
+        assert args.update is False
+
+    def test_cli_shows_notification_when_newer_version(self, tmp_path) -> None:
+        """When a newer version is available, main() prints an update notification."""
+        from io import StringIO
+        from unittest.mock import patch
+        from rich.console import Console
+
+        buf = StringIO()
+        console = Console(file=buf, highlight=False)
+
+        with patch("fsaudit.cli.check_update", return_value="9.9.9"):
+            # Use --history to avoid needing a real path (exits early, still checks update)
+            main(["--history"], _console=console)
+
+        output = buf.getvalue()
+        assert "9.9.9" in output
+        assert "fsaudit --update" in output
+
+    def test_cli_no_notification_when_up_to_date(self, tmp_path) -> None:
+        """When no newer version, main() does NOT print an update notification."""
+        from io import StringIO
+        from unittest.mock import patch
+        from rich.console import Console
+
+        buf = StringIO()
+        console = Console(file=buf, highlight=False)
+
+        with patch("fsaudit.cli.check_update", return_value=None):
+            main(["--history"], _console=console)
+
+        output = buf.getvalue()
+        assert "New version available" not in output
