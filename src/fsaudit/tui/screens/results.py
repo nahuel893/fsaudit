@@ -81,7 +81,12 @@ class ResultsScreen(Screen):
 
     def on_mount(self) -> None:
         self.title = "fsaudit - Results"
-        self._populate_tables()
+        try:
+            self._populate_tables()
+        except Exception as e:
+            self.query_one("#lbl-health", Label).update(
+                f"[bold red]Error loading results: {e}[/bold red]"
+            )
 
     def _populate_tables(self) -> None:
         analysis = self._analysis

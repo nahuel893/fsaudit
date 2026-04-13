@@ -66,9 +66,14 @@ Button {
 }
 
 DataTable {
-    height: 100%;
+    height: 1fr;
+    min-height: 10;
 }
 
 TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
     height: 1fr;
 }
