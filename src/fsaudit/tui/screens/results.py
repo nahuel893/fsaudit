@@ -78,7 +78,6 @@ class ResultsScreen(Screen):
             yield Button("Export Report", id="btn-export", variant="primary")
             yield Button("New Scan", id="btn-new-scan", variant="default")
             yield Button("Salir", id="btn-quit", variant="error")
-        yield Footer()
 
     def on_mount(self) -> None:
         self.title = "fsaudit - Results"

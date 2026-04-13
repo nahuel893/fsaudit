@@ -2,6 +2,7 @@
 
 Screen {
     background: $surface;
+    layout: vertical;
 }
 
 #lbl-health {
@@ -9,11 +10,22 @@ Screen {
     padding: 1;
     width: 100%;
     border: solid $accent;
+    height: auto;
 }
 
 #lbl-path {
     padding: 1;
     color: $text-muted;
+}
+
+#lbl-search-hint {
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#lbl-search-status {
+    padding: 0 1;
+    height: auto;
 }
 
 .field-label {
@@ -31,9 +43,9 @@ Button {
 }
 
 #action-bar {
-    dock: bottom;
-    height: auto;
-    padding: 1 0;
+    height: 3;
+    align: center middle;
+    padding: 0 1;
 }
 
 #action-bar Button {
@@ -42,10 +54,11 @@ Button {
 
 #progress {
     margin: 1 0;
+    height: auto;
 }
 
 #log {
-    height: 60%;
+    height: 1fr;
     border: solid $accent;
 }
 
