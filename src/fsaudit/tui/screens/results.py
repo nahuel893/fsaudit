@@ -31,7 +31,10 @@ def _fmt_bytes(n: int) -> str:
 class ResultsScreen(Screen):
     """Displays the completed audit results in a tabbed layout."""
 
-    BINDINGS = [("escape", "new_scan", "New Scan")]
+    BINDINGS = [
+        ("escape", "new_scan", "New Scan"),
+        ("q", "quit_app", "Quit"),
+    ]
 
     def __init__(self, results: dict) -> None:
         super().__init__()
@@ -72,6 +75,7 @@ class ResultsScreen(Screen):
                 yield DataTable(id="dt-health", zebra_stripes=True)
         yield Button("Export Report", id="btn-export", variant="primary")
         yield Button("New Scan", id="btn-new-scan", variant="default")
+        yield Button("Salir", id="btn-quit", variant="error")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -146,9 +150,13 @@ class ResultsScreen(Screen):
         self.app.pop_screen()
         self.app.push_screen(FolderSelectorScreen())
 
+    def action_quit_app(self) -> None:
+        self.app.exit()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-new-scan":
             self.action_new_scan()
         elif event.button.id == "btn-export":
-            # Report already generated; just notify
             self.notify(f"Report saved at: {self._report_path}", title="Export")
+        elif event.button.id == "btn-quit":
+            self.app.exit()
