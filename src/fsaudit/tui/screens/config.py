@@ -48,6 +48,8 @@ class ConfigScreen(Screen):
             yield RadioButton("HTML", id="radio-html")
         yield Label("Hash duplicates (slower, more accurate):", classes="field-label")
         yield Switch(id="switch-hash-dup", value=False)
+        yield Label("Extract author from documents (.docx, .pdf, etc.):", classes="field-label")
+        yield Switch(id="switch-extract-author", value=False)
         yield Label("", id="lbl-error", classes="error")
         yield Button("Start Audit", id="btn-start", variant="primary")
         yield Button("Back", id="btn-back", variant="default")
@@ -113,6 +115,9 @@ class ConfigScreen(Screen):
         # Hash duplicates
         hash_dup = self.query_one("#switch-hash-dup", Switch).value
 
+        # Extract author
+        extract_author = self.query_one("#switch-extract-author", Switch).value
+
         error_label.update("")
         self.dismiss(
             ScanConfig(
@@ -123,5 +128,6 @@ class ConfigScreen(Screen):
                 inactive_days=inactive_val or 365,
                 format=fmt,
                 hash_duplicates=hash_dup,
+                extract_author=extract_author,
             )
         )

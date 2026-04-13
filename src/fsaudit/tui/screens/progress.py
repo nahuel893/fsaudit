@@ -137,9 +137,10 @@ class ProgressScreen(Screen):
             classified = [f for f in classified if f.size_bytes >= cfg.min_size]
 
         # 4. Author extraction (if configured)
-        if cfg.hash_duplicates:
-            # Note: hash_duplicates is passed to analyze, not here
-            pass
+        if getattr(cfg, "extract_author", False):
+            self._update_phase("Extracting author metadata…")
+            from fsaudit.enricher import enrich_authors
+            classified = enrich_authors(classified)
 
         def _classify_done() -> None:
             try:

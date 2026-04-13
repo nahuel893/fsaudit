@@ -17,4 +17,5 @@ class ScanConfig:
     inactive_days: int = 365
     format: str = "excel"
     hash_duplicates: bool = False
+    extract_author: bool = False
     output_dir: Path = field(default_factory=Path.cwd)
