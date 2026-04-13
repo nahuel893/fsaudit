@@ -43,6 +43,7 @@ Button {
 }
 
 #action-bar {
+    dock: bottom;
     height: auto;
     min-height: 3;
     align: center middle;
