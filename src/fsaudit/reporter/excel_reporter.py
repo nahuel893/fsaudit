@@ -8,8 +8,6 @@ from pathlib import Path
 from datetime import datetime
 
 from openpyxl import Workbook
-from openpyxl.chart import LineChart, Reference
-from openpyxl.chart.axis import DateAxis
 from openpyxl.styles import Font, NamedStyle, PatternFill, numbers
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -86,39 +84,6 @@ class ExcelReporter(BaseReporter):
     def _parse_period(period: str) -> datetime:
         """Convert a YYYY-MM-01 string to a datetime for date axis."""
         return datetime.strptime(period, "%Y-%m-%d")
-
-    @staticmethod
-    def _make_date_line_chart(
-        ws: Worksheet,
-        date_col: int,
-        value_col: int,
-        header_row: int,
-        data_start_row: int,
-        data_end_row: int,
-        *,
-        title: str = "Archivos por Período",
-        width: int = 20,
-        height: int = 12,
-    ) -> LineChart:
-        """Build a LineChart with a proper DateAxis on X."""
-        chart = LineChart()
-        chart.title = title
-        chart.y_axis.title = "Cantidad"
-        chart.style = 10
-
-        # Replace default x axis with DateAxis
-        chart.x_axis = DateAxis()
-        chart.x_axis.title = "Período"
-        chart.x_axis.number_format = "yyyy-mm"
-        chart.x_axis.majorTimeUnit = "months"
-
-        data = Reference(ws, min_col=value_col, min_row=header_row, max_row=data_end_row)
-        cats = Reference(ws, min_col=date_col, min_row=data_start_row, max_row=data_end_row)
-        chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
-        chart.width = width
-        chart.height = height
-        return chart
 
     @staticmethod
     def _bytes_to_mb(size_bytes: int) -> float:
@@ -248,33 +213,6 @@ class ExcelReporter(BaseReporter):
 
         current_row = len(kpis) + 3  # after KPIs + title + blank
 
-        # --- Timeline chart placed to the RIGHT of KPIs (cols E-L, row 2) ---
-        sorted_periods = sorted(analysis.timeline.keys())
-        if sorted_periods:
-            # Write timeline data in a hidden area (cols E-F, starting at row 16+)
-            # far enough down that the chart covers them visually
-            tl_data_row = max(current_row + 20, 40)
-            ws.cell(row=tl_data_row, column=5, value="Período")
-            ws.cell(row=tl_data_row, column=6, value="Cantidad")
-            for idx, period in enumerate(sorted_periods):
-                cell = ws.cell(row=tl_data_row + 1 + idx, column=5,
-                               value=self._parse_period(period))
-                cell.number_format = "yyyy-mm-dd"
-                ws.cell(row=tl_data_row + 1 + idx, column=6,
-                        value=analysis.timeline[period])
-
-            if len(sorted_periods) >= 2:
-                chart = self._make_date_line_chart(
-                    ws,
-                    date_col=5, value_col=6,
-                    header_row=tl_data_row,
-                    data_start_row=tl_data_row + 1,
-                    data_end_row=tl_data_row + len(sorted_periods),
-                    width=22, height=14,
-                )
-                # Place chart at E2 — right of KPIs, immediately visible
-                ws.add_chart(chart, "E2")
-
         # Top 5 Categorías por Tamaño section
         ws.cell(row=current_row, column=1, value="Top 5 Categorías por Tamaño").font = section_font
         current_row += 1
@@ -360,15 +298,6 @@ class ExcelReporter(BaseReporter):
         self._apply_autofilter(ws, len(headers))
         self._auto_column_width(ws)
 
-        # Add LineChart with DateAxis if we have enough data points
-        num_rows = len(sorted_periods)
-        if num_rows >= 2:
-            chart = self._make_date_line_chart(
-                ws,
-                date_col=1, value_col=2,
-                header_row=1, data_start_row=2, data_end_row=num_rows + 1,
-            )
-            ws.add_chart(chart, f"A{num_rows + 3}")
 
     def _write_top_pesados(
         self, ws: Worksheet, analysis: AnalysisResult

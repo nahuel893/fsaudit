@@ -396,32 +396,6 @@ class TestDashboard:
         assert ws.cell(row=row + 1, column=2).value == "Cantidad"
         wb.close()
 
-    def test_dashboard_has_timeline_chart(
-        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
-    ) -> None:
-        out = tmp_path / "report.xlsx"
-        ExcelReporter().generate(sample_records, sample_analysis, out)
-        wb = load_workbook(out)
-        ws = wb["Dashboard"]
-
-        # Dashboard should have a chart embedded at E2
-        assert len(ws._charts) >= 1, "No chart found on Dashboard sheet"
-        wb.close()
-
-    def test_dashboard_timeline_data_present(
-        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
-    ) -> None:
-        out = tmp_path / "report.xlsx"
-        ExcelReporter().generate(sample_records, sample_analysis, out)
-        wb = load_workbook(out)
-        ws = wb["Dashboard"]
-
-        # Timeline data is in col E — find the period values
-        all_col_e = [ws.cell(row=r, column=5).value for r in range(1, ws.max_row + 1)]
-        assert datetime(2024, 12, 1) in all_col_e
-        assert datetime(2025, 1, 1) in all_col_e
-        assert datetime(2025, 6, 1) in all_col_e
-        wb.close()
 
 
 # ---------------------------------------------------------------------------
@@ -724,49 +698,6 @@ class TestAutofilterAllSheets:
 # ---------------------------------------------------------------------------
 
 
-class TestTimelineChart:
-    def test_chart_exists_with_data(
-        self, tmp_path: Path, sample_records: list[FileRecord], sample_analysis: AnalysisResult
-    ) -> None:
-        """Timeline with >= 2 periods should have a LineChart."""
-        out = tmp_path / "report.xlsx"
-        ExcelReporter().generate(sample_records, sample_analysis, out)
-        wb = load_workbook(out)
-        ws = wb["Timeline"]
-
-        assert len(ws._charts) == 1
-        chart = ws._charts[0]
-        # After save/load, chart.title is a Title object with rich text runs
-        title_obj = chart.title
-        runs = title_obj.tx.rich.paragraphs[0].r
-        title_text = "".join(run.t for run in runs)
-        assert title_text == "Archivos por Período"
-
-        wb.close()
-
-    def test_no_chart_on_empty_timeline(self, tmp_path: Path) -> None:
-        """Empty timeline should have no chart."""
-        out = tmp_path / "empty.xlsx"
-        ExcelReporter().generate([], AnalysisResult(), out)
-        wb = load_workbook(out)
-        ws = wb["Timeline"]
-
-        assert len(ws._charts) == 0
-
-        wb.close()
-
-    def test_no_chart_on_single_period(self, tmp_path: Path) -> None:
-        """Timeline with only 1 period should have no chart."""
-        ar = AnalysisResult()
-        ar.timeline = {"2025-01-01": 5}
-        out = tmp_path / "single.xlsx"
-        ExcelReporter().generate([], ar, out)
-        wb = load_workbook(out)
-        ws = wb["Timeline"]
-
-        assert len(ws._charts) == 0
-
-        wb.close()
 
 
 # ---------------------------------------------------------------------------
