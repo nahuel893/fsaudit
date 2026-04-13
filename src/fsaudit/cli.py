@@ -22,6 +22,7 @@ from fsaudit.classifier.classifier import classify
 from fsaudit.logging_config import setup_logging
 from fsaudit.reporter.excel_reporter import ExcelReporter
 from fsaudit.scanner.scanner import FileScanner
+from fsaudit.shortcut import create_shortcut
 
 logger = logging.getLogger("fsaudit.cli")
 
@@ -38,8 +39,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--path",
-        required=True,
+        required=False,
+        default=None,
         help="Root directory to audit.",
+    )
+    parser.add_argument(
+        "--create-shortcut",
+        action="store_true",
+        default=False,
+        help="Create a desktop shortcut for fsaudit-tui and exit.",
     )
     parser.add_argument(
         "--output-dir",
@@ -157,6 +165,11 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
     # --- Resolve db path ---
     db_path = Path(args.db) if args.db else _DEFAULT_DB
 
+    # --- --create-shortcut: create desktop shortcut and exit ---
+    if getattr(args, "create_shortcut", False):
+        success = create_shortcut(console=console)
+        return 0 if success else 1
+
     # --- --history: list runs and exit ---
     if getattr(args, "history", False):
         return _cmd_history(console, db_path)
@@ -164,6 +177,13 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
     # --- --query: execute SELECT and exit ---
     if getattr(args, "query", None):
         return _cmd_query(console, db_path, args.query)
+
+    # --- --path is required for normal runs ---
+    if not args.path:
+        Console(file=sys.stderr, highlight=False).print(
+            "Error: --path is required for auditing a directory."
+        )
+        return 1
 
     # --- Input validation ---
     path = Path(args.path).resolve()

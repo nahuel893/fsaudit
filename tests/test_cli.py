@@ -16,9 +16,11 @@ class TestBuildParser:
     """Tests for build_parser() argument definitions."""
 
     def test_path_is_required(self) -> None:
-        parser = build_parser()
-        with pytest.raises(SystemExit):
-            parser.parse_args([])
+        # --path is enforced at main() level (not parser), so that --create-shortcut
+        # can work without it. Running main() with no args and no --create-shortcut
+        # must return exit code 1.
+        result = main([])
+        assert result == 1
 
     def test_defaults(self) -> None:
         parser = build_parser()
@@ -484,3 +486,59 @@ class TestExtractAuthorFlag:
 
         assert result == 0
         mock_enrich.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# --create-shortcut flag
+# ---------------------------------------------------------------------------
+
+class TestCreateShortcutFlag:
+    """Tests for --create-shortcut CLI flag."""
+
+    def test_cli_create_shortcut_flag_accepted(self) -> None:
+        """Parser accepts --create-shortcut without error."""
+        args = build_parser().parse_args(["--create-shortcut"])
+        assert args.create_shortcut is True
+
+    def test_cli_create_shortcut_does_not_require_path(self) -> None:
+        """--create-shortcut works without --path (no SystemExit)."""
+        args = build_parser().parse_args(["--create-shortcut"])
+        assert args.create_shortcut is True
+
+    def test_cli_create_shortcut_default_false(self) -> None:
+        """--create-shortcut defaults to False."""
+        args = build_parser().parse_args(["--path", "/tmp"])
+        assert args.create_shortcut is False
+
+    def test_cli_create_shortcut_returns_0_on_success(self) -> None:
+        """main() returns 0 when create_shortcut() succeeds."""
+        from unittest.mock import patch
+
+        with patch("fsaudit.cli.create_shortcut", return_value=True) as mock_sc:
+            result = main(["--create-shortcut"])
+
+        assert result == 0
+        mock_sc.assert_called_once()
+
+    def test_cli_create_shortcut_returns_1_on_failure(self) -> None:
+        """main() returns 1 when create_shortcut() returns False."""
+        from unittest.mock import patch
+
+        with patch("fsaudit.cli.create_shortcut", return_value=False):
+            result = main(["--create-shortcut"])
+
+        assert result == 1
+
+    def test_cli_create_shortcut_passes_console(self) -> None:
+        """create_shortcut() is called with the console instance."""
+        from io import StringIO
+        from unittest.mock import patch
+        from rich.console import Console
+
+        console = Console(file=StringIO(), highlight=False)
+
+        with patch("fsaudit.cli.create_shortcut", return_value=True) as mock_sc:
+            main(["--create-shortcut"], _console=console)
+
+        _, kwargs = mock_sc.call_args
+        assert "console" in kwargs
