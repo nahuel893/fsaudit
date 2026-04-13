@@ -204,21 +204,27 @@ class ProgressScreen(Screen):
             "report_path": output_path,
         }
 
-    def on_worker_success(self, event) -> None:
-        """Worker completed — enable buttons and wait for user action."""
+    def on_worker_state_changed(self, event) -> None:
+        """Handle worker state transitions."""
+        from textual.worker import WorkerState
+
+        if event.state == WorkerState.SUCCESS:
+            self._on_success(event.worker)
+        elif event.state == WorkerState.ERROR:
+            self._on_error(event.worker)
+
+    def _on_success(self, worker) -> None:
+        """Worker completed — enable buttons and show results."""
         try:
-            self._worker_result = event.worker.result
+            self._worker_result = worker.result
         except Exception:
             self._worker_result = None
 
-        # Enable buttons FIRST — most important thing
-        try:
-            self.query_one("#btn-continue", Button).disabled = False
-            self.query_one("#btn-quit", Button).disabled = False
-        except Exception:
-            pass
+        # Enable buttons
+        self.query_one("#btn-continue", Button).disabled = False
+        self.query_one("#btn-quit", Button).disabled = False
 
-        # Then update labels (non-critical)
+        # Update labels
         try:
             result = self._worker_result or {}
             analysis = result.get("analysis")
@@ -234,9 +240,9 @@ class ProgressScreen(Screen):
         except Exception:
             pass
 
-    def on_worker_error(self, event) -> None:
+    def _on_error(self, worker) -> None:
         """Worker failed — show error and enable back button."""
         self.query_one("#lbl-phase", Label).update("[bold red]Audit failed[/bold red]")
-        error_msg = str(event.worker.error) if event.worker.error else "Unknown error"
+        error_msg = str(worker.error) if worker.error else "Unknown error"
         self.query_one("#lbl-error", Label).update(error_msg)
         self.query_one("#btn-back", Button).disabled = False
