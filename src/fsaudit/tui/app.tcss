@@ -43,13 +43,15 @@ Button {
 }
 
 #action-bar {
-    height: 3;
+    height: auto;
+    min-height: 3;
     align: center middle;
-    padding: 0 1;
+    padding: 1 1;
 }
 
 #action-bar Button {
     margin: 0 1;
+    min-width: 16;
 }
 
 #progress {
@@ -58,9 +60,9 @@ Button {
 }
 
 #log {
-    height: 1fr;
-    max-height: 60%;
+    height: 40%;
     border: solid $accent;
+    overflow-y: auto;
 }
 
 DataTable {
