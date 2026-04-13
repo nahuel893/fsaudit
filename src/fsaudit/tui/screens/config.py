@@ -49,7 +49,7 @@ class ConfigScreen(Screen):
         yield Label("Hash duplicates (slower, more accurate):", classes="field-label")
         yield Switch(id="switch-hash-dup", value=False)
         yield Label("Extract author from documents (.docx, .pdf, etc.):", classes="field-label")
-        yield Switch(id="switch-extract-author", value=False)
+        yield Switch(id="switch-extract-author", value=True)
         yield Label("", id="lbl-error", classes="error")
         yield Button("Start Audit", id="btn-start", variant="primary")
         yield Button("Back", id="btn-back", variant="default")
