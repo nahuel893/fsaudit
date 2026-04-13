@@ -205,27 +205,34 @@ class ProgressScreen(Screen):
         }
 
     def on_worker_success(self, event) -> None:
-        """Worker completed — show completion message and wait for user action."""
-        self._worker_result = event.worker.result
-        report_path = event.worker.result.get("report_path", "")
-        total = event.worker.result.get("analysis")
-        files = total.total_files if total else 0
-        score = f"{total.health_score:.1f}" if total else "?"
+        """Worker completed — enable buttons and wait for user action."""
+        try:
+            self._worker_result = event.worker.result
+        except Exception:
+            self._worker_result = None
 
-        self.query_one("#lbl-phase", Label).update(
-            f"[bold green]Audit complete![/bold green]  "
-            f"Files: {files:,} | Health: {score}/100"
-        )
-        self.query_one("#log", RichLog).write(
-            f"\n[bold]Report saved:[/bold] {report_path}"
-        )
+        # Enable buttons FIRST — most important thing
+        try:
+            self.query_one("#btn-continue", Button).disabled = False
+            self.query_one("#btn-quit", Button).disabled = False
+        except Exception:
+            pass
 
-        # Show action buttons
-        btn_continue = self.query_one("#btn-continue", Button)
-        btn_continue.disabled = False
-        btn_quit = self.query_one("#btn-quit", Button)
-        btn_quit.disabled = False
-        btn_continue.focus()
+        # Then update labels (non-critical)
+        try:
+            result = self._worker_result or {}
+            analysis = result.get("analysis")
+            report_path = result.get("report_path", "")
+            if analysis:
+                self.query_one("#lbl-phase", Label).update(
+                    f"[bold green]Audit complete![/bold green]  "
+                    f"Files: {analysis.total_files:,} | Health: {analysis.health_score:.1f}/100"
+                )
+            self.query_one("#log", RichLog).write(
+                f"\n[bold]Report saved:[/bold] {report_path}"
+            )
+        except Exception:
+            pass
 
     def on_worker_error(self, event) -> None:
         """Worker failed — show error and enable back button."""
