@@ -6,6 +6,7 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.screen import Screen
+from textual.containers import Horizontal
 from textual.widgets import (
     Button,
     DataTable,
@@ -73,9 +74,10 @@ class ResultsScreen(Screen):
                 yield DataTable(id="dt-duplicates", zebra_stripes=True)
             with TabPane("Health Breakdown", id="tab-health"):
                 yield DataTable(id="dt-health", zebra_stripes=True)
-        yield Button("Export Report", id="btn-export", variant="primary")
-        yield Button("New Scan", id="btn-new-scan", variant="default")
-        yield Button("Salir", id="btn-quit", variant="error")
+        with Horizontal(id="action-bar"):
+            yield Button("Export Report", id="btn-export", variant="primary")
+            yield Button("New Scan", id="btn-new-scan", variant="default")
+            yield Button("Salir", id="btn-quit", variant="error")
         yield Footer()
 
     def on_mount(self) -> None:

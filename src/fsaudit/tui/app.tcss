@@ -30,6 +30,16 @@ Button {
     margin: 1 1 0 0;
 }
 
+#action-bar {
+    dock: bottom;
+    height: auto;
+    padding: 1 0;
+}
+
+#action-bar Button {
+    margin: 0 1;
+}
+
 #progress {
     margin: 1 0;
 }
