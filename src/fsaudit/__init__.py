@@ -10,6 +10,16 @@ from fsaudit.classifier.classifier import classify
 from fsaudit.enricher import enrich_authors
 from fsaudit.scanner.models import DirectoryRecord, FileRecord, ScanResult
 
+# Security API (opt-in; imported lazily here to avoid side-effects when
+# security_scan=False, but still available for programmatic use)
+from fsaudit.security import (
+    SecurityConfigError,
+    SecurityFinding,
+    SecurityResult,
+    Severity,
+    run_security_scan,
+)
+
 __all__ = [
     "__version__",
     "audit",
@@ -22,4 +32,10 @@ __all__ = [
     "FileRecord",
     "ScanResult",
     "DirectoryRecord",
+    # Security
+    "SecurityResult",
+    "SecurityFinding",
+    "Severity",
+    "SecurityConfigError",
+    "run_security_scan",
 ]

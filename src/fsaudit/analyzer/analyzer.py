@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fsaudit.analyzer.metrics import AnalysisResult
+from fsaudit.common import permission_utils as _perm_utils
 from fsaudit.scanner.models import FileRecord, ScanResult
 
 
@@ -52,7 +53,7 @@ def analyze(
     result.zero_byte_files = _find_zero_byte(files)
     result.empty_directories = _find_empty_directories(scan_result)
     result.duplicates_by_name = _find_duplicates_by_name(files)
-    result.permission_issues = _find_permission_issues(files)
+    result.permission_issues = _perm_utils.find_permission_issues(files)
     if hash_duplicates and result.duplicates_by_name:
         result.duplicates_by_hash = _find_duplicates_by_hash(
             result.duplicates_by_name, size_threshold=hash_size_threshold
@@ -281,40 +282,5 @@ def _compute_health_score(result: "AnalysisResult") -> tuple[float, dict[str, fl
     return round(score, 4), breakdown
 
 
-def _find_permission_issues(records: list[FileRecord]) -> list[dict]:
-    """RF-16: Detect 777, world-writable, SUID, SGID permissions."""
-    issues: list[dict] = []
-    for r in records:
-        if r.permissions is None:
-            continue
-        perm_str = r.permissions
-        try:
-            perm_int = int(perm_str, 8)
-        except ValueError:
-            continue
-
-        # Check each issue type; report the most specific match
-        if perm_str == "777":
-            issues.append(
-                {"path": str(r.path), "permissions": perm_str, "issue": "777"}
-            )
-        elif perm_str[-1] in ("2", "3", "6", "7"):
-            issues.append(
-                {
-                    "path": str(r.path),
-                    "permissions": perm_str,
-                    "issue": "world-writable",
-                }
-            )
-
-        # SUID / SGID (can co-exist with above, but spec shows separate entries)
-        if perm_int & 0o4000:
-            issues.append(
-                {"path": str(r.path), "permissions": perm_str, "issue": "suid"}
-            )
-        if perm_int & 0o2000:
-            issues.append(
-                {"path": str(r.path), "permissions": perm_str, "issue": "sgid"}
-            )
-
-    return issues
+# _find_permission_issues moved to fsaudit.common.permission_utils (T02 refactor).
+# The local alias `_find_permission_issues` is imported at the top of this module.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -11,8 +12,14 @@ from fsaudit.analyzer.metrics import AnalysisResult
 from fsaudit.reporter.base import BaseReporter
 from fsaudit.scanner.models import FileRecord
 
+if TYPE_CHECKING:
+    from fsaudit.security.models import SecurityResult
+
 # Maximum penalty weight — used for bar scaling (sum of all weights = 100)
 _MAX_PENALTY_WEIGHT = 100.0
+
+# Severity order for grouping (critical first)
+_SEVERITY_ORDER = ["critical", "high", "medium", "low"]
 
 
 class HtmlReporter(BaseReporter):
@@ -31,6 +38,8 @@ class HtmlReporter(BaseReporter):
         records: list[FileRecord],
         analysis: AnalysisResult,
         output_path: Path,
+        *,
+        security: "SecurityResult | None" = None,
     ) -> Path:
         """Render and write the HTML report.
 
@@ -38,6 +47,9 @@ class HtmlReporter(BaseReporter):
             records: Classified file records.
             analysis: Pre-computed analysis metrics.
             output_path: Destination ``.html`` file. Parent dir must exist.
+            security: Optional security scan result. When provided, a
+                collapsible "Security" section is appended to the HTML.
+                When ``None`` (default) the output is identical to v0.10.0.
 
         Returns:
             ``output_path`` after writing.
@@ -59,6 +71,18 @@ class HtmlReporter(BaseReporter):
         else:
             health_color = "#dc3545"
 
+        # Build security findings grouped by severity (only when security present)
+        security_by_severity: dict[str, list] | None = None
+        if security is not None:
+            security_by_severity = {}
+            for sev in _SEVERITY_ORDER:
+                bucket = [
+                    f for f in security.findings
+                    if (f.severity.value if hasattr(f.severity, "value") else str(f.severity)) == sev
+                ]
+                if bucket:
+                    security_by_severity[sev] = bucket
+
         html = template.render(
             root_path=str(getattr(analysis, "root_path", "/")),
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -67,6 +91,8 @@ class HtmlReporter(BaseReporter):
             max_rows=self.max_rows,
             health_color=health_color,
             max_penalty_weight=_MAX_PENALTY_WEIGHT,
+            security=security,
+            security_by_severity=security_by_severity,
         )
 
         output_path = Path(output_path)

@@ -166,6 +166,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Update fsaudit to the latest version from PyPI.",
     )
+    # --- Security scan flags ---
+    parser.add_argument(
+        "--security-scan",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable security scan: detect secrets, tokens, suspicious files, and "
+            "permission anomalies. Reads file content. May expose sensitive data in findings."
+        ),
+    )
+    parser.add_argument(
+        "--security-config",
+        default=None,
+        metavar="PATH",
+        help="Path to a custom security.yaml config file. Overrides the bundled default.",
+    )
+    parser.add_argument(
+        "--security-max-size",
+        type=int,
+        default=None,
+        metavar="BYTES",
+        help="Maximum file size in bytes for content scanning (default: 1 MiB).",
+    )
     return parser
 
 
@@ -310,7 +333,26 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
             )
         )
 
-        # --- 5. Report ---
+        # --- 5. Security scan (optional, opt-in) ---
+        if getattr(args, "security_scan", False):
+            from fsaudit.security import run_security_scan
+            console.print(
+                "[Security Scan] Content scanning enabled. Files will be read to detect "
+                "secrets, tokens, and anomalies. May expose sensitive file content in findings."
+            )
+            console.print("Running security scan ...")
+            with console.status(""):
+                security_result = run_security_scan(
+                    classified,
+                    config_path=getattr(args, "security_config", None),
+                    max_size=getattr(args, "security_max_size", None),
+                )
+            console.print(
+                f"Security scan complete: {len(security_result.findings)} finding(s),"
+                f" score={security_result.security_score}/100."
+            )
+
+        # --- 6. Report ---
         fmt = getattr(args, "format", "excel")
         if fmt == "html":
             from fsaudit.reporter.html_reporter import HtmlReporter

@@ -32,6 +32,7 @@ class AuditResult:
     analysis: AnalysisResult
     scan_result: ScanResult
     report_path: Path | None = None
+    security: "SecurityResult | None" = None
 
     @property
     def health_score(self) -> float:
@@ -109,6 +110,9 @@ def audit(
     extract_author: bool = False,
     strip_time: bool = False,
     on_file: Callable[[Path], None] | None = None,
+    security_scan: bool = False,
+    security_config: Path | None = None,
+    security_max_size: int | None = None,
 ) -> AuditResult:
     """Run the full audit pipeline on *path*.
 
@@ -191,7 +195,23 @@ def audit(
         hash_duplicates=hash_duplicates,
     )
 
-    # 7. Generate report (optional)
+    # 7. Security scan (optional, opt-in)
+    security_result = None
+    if security_scan:
+        import sys as _sys
+        print(  # noqa: T201
+            "[Security Scan] Content scanning enabled. Files will be read to detect "
+            "secrets, tokens, and anomalies. May expose sensitive file content in findings.",
+            file=_sys.stdout,
+        )
+        from fsaudit.security import run_security_scan as _run_security_scan
+        security_result = _run_security_scan(
+            classified,
+            config_path=security_config,
+            max_size=security_max_size,
+        )
+
+    # 8. Generate report (optional)
     report_path: Path | None = None
     if format is not None and report_dir is not None:
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -213,4 +233,5 @@ def audit(
         analysis=analysis,
         scan_result=scan_result,
         report_path=report_path,
+        security=security_result,
     )

@@ -1,0 +1,234 @@
+{
+  "records": [
+    {
+      "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/readme.txt",
+      "name": "readme.txt",
+      "extension": ".txt",
+      "size_bytes": 21,
+      "mtime": "2026-04-19 20:04:54.309202",
+      "creation_time": "2026-04-19 20:04:54.309202",
+      "atime": "2026-04-19 20:04:54.309202",
+      "depth": 0,
+      "is_hidden": false,
+      "permissions": "644",
+      "category": "Desconocido",
+      "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+      "author": null
+    },
+    {
+      "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/script.py",
+      "name": "script.py",
+      "extension": ".py",
+      "size_bytes": 12,
+      "mtime": "2026-04-19 20:04:55.205865",
+      "creation_time": "2026-04-19 20:04:55.205865",
+      "atime": "2026-04-19 20:04:55.205865",
+      "depth": 0,
+      "is_hidden": false,
+      "permissions": "644",
+      "category": "Codigo",
+      "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+      "author": null
+    },
+    {
+      "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/config.json",
+      "name": "config.json",
+      "extension": ".json",
+      "size_bytes": 15,
+      "mtime": "2026-04-19 20:04:56.099195",
+      "creation_time": "2026-04-19 20:04:56.099195",
+      "atime": "2026-04-19 20:04:56.099195",
+      "depth": 0,
+      "is_hidden": false,
+      "permissions": "644",
+      "category": "Codigo",
+      "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+      "author": null
+    },
+    {
+      "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_a/data.txt",
+      "name": "data.txt",
+      "extension": ".txt",
+      "size_bytes": 15,
+      "mtime": "2026-04-19 20:04:56.495860",
+      "creation_time": "2026-04-19 20:04:56.495860",
+      "atime": "2026-04-19 20:04:56.495860",
+      "depth": 1,
+      "is_hidden": false,
+      "permissions": "644",
+      "category": "Desconocido",
+      "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_a",
+      "author": null
+    },
+    {
+      "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_b/notes.md",
+      "name": "notes.md",
+      "extension": ".md",
+      "size_bytes": 30,
+      "mtime": "2026-04-19 20:04:57.422523",
+      "creation_time": "2026-04-19 20:04:57.422523",
+      "atime": "2026-04-19 20:04:57.422523",
+      "depth": 1,
+      "is_hidden": false,
+      "permissions": "644",
+      "category": "Codigo",
+      "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_b",
+      "author": null
+    }
+  ],
+  "analysis": {
+    "total_files": 5,
+    "total_size_bytes": 93,
+    "by_category": {
+      "Desconocido": {
+        "count": 2,
+        "bytes": 36,
+        "newest": "2026-04-19 20:04:56.495860",
+        "oldest": "2026-04-19 20:04:54.309202",
+        "percent": 38.70967741935484,
+        "avg_size": 18.0
+      },
+      "Codigo": {
+        "count": 3,
+        "bytes": 57,
+        "newest": "2026-04-19 20:04:57.422523",
+        "oldest": "2026-04-19 20:04:55.205865",
+        "percent": 61.29032258064516,
+        "avg_size": 19.0
+      }
+    },
+    "top_largest": [
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_b/notes.md",
+        "size_bytes": 30,
+        "category": "Codigo",
+        "mtime": "2026-04-19 20:04:57.422523"
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/readme.txt",
+        "size_bytes": 21,
+        "category": "Desconocido",
+        "mtime": "2026-04-19 20:04:54.309202"
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/config.json",
+        "size_bytes": 15,
+        "category": "Codigo",
+        "mtime": "2026-04-19 20:04:56.099195"
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_a/data.txt",
+        "size_bytes": 15,
+        "category": "Desconocido",
+        "mtime": "2026-04-19 20:04:56.495860"
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/script.py",
+        "size_bytes": 12,
+        "category": "Codigo",
+        "mtime": "2026-04-19 20:04:55.205865"
+      }
+    ],
+    "inactive_files": [],
+    "zero_byte_files": [],
+    "empty_directories": [],
+    "duplicates_by_name": {},
+    "timeline": {
+      "2026-04-01": 5
+    },
+    "permission_issues": [],
+    "duplicates_by_hash": {},
+    "health_score": 99.5643,
+    "health_breakdown": {
+      "inactive_ratio": 0.0,
+      "name_duplicate_ratio": 0.0,
+      "zero_byte_ratio": 0.0,
+      "permission_issue_ratio": 0.0,
+      "empty_dir_ratio": 0.0,
+      "category_concentration": 0.4357
+    }
+  },
+  "scan_result": {
+    "files": [
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/readme.txt",
+        "name": "readme.txt",
+        "extension": ".txt",
+        "size_bytes": 21,
+        "mtime": "2026-04-19 20:04:54.309202",
+        "creation_time": "2026-04-19 20:04:54.309202",
+        "atime": "2026-04-19 20:04:54.309202",
+        "depth": 0,
+        "is_hidden": false,
+        "permissions": "644",
+        "category": "Unclassified",
+        "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+        "author": null
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/script.py",
+        "name": "script.py",
+        "extension": ".py",
+        "size_bytes": 12,
+        "mtime": "2026-04-19 20:04:55.205865",
+        "creation_time": "2026-04-19 20:04:55.205865",
+        "atime": "2026-04-19 20:04:55.205865",
+        "depth": 0,
+        "is_hidden": false,
+        "permissions": "644",
+        "category": "Unclassified",
+        "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+        "author": null
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/config.json",
+        "name": "config.json",
+        "extension": ".json",
+        "size_bytes": 15,
+        "mtime": "2026-04-19 20:04:56.099195",
+        "creation_time": "2026-04-19 20:04:56.099195",
+        "atime": "2026-04-19 20:04:56.099195",
+        "depth": 0,
+        "is_hidden": false,
+        "permissions": "644",
+        "category": "Unclassified",
+        "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+        "author": null
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_a/data.txt",
+        "name": "data.txt",
+        "extension": ".txt",
+        "size_bytes": 15,
+        "mtime": "2026-04-19 20:04:56.495860",
+        "creation_time": "2026-04-19 20:04:56.495860",
+        "atime": "2026-04-19 20:04:56.495860",
+        "depth": 1,
+        "is_hidden": false,
+        "permissions": "644",
+        "category": "Unclassified",
+        "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_a",
+        "author": null
+      },
+      {
+        "path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_b/notes.md",
+        "name": "notes.md",
+        "extension": ".md",
+        "size_bytes": 30,
+        "mtime": "2026-04-19 20:04:57.422523",
+        "creation_time": "2026-04-19 20:04:57.422523",
+        "atime": "2026-04-19 20:04:57.422523",
+        "depth": 1,
+        "is_hidden": false,
+        "permissions": "644",
+        "category": "Unclassified",
+        "parent_dir": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree/subdir_b",
+        "author": null
+      }
+    ],
+    "directories": [],
+    "root_path": "/home/nh/fsaudit/tests/fixtures/golden/sample_tree",
+    "errors": []
+  },
+  "report_path": null
+}

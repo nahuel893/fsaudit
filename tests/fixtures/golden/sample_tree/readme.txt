@@ -1,0 +1,1 @@
+Hello golden fixture

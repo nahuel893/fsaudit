@@ -360,6 +360,59 @@
   </div>
 </section>
 
+{% if security is not none and security_by_severity is not none %}
+<!-- ===================== SECURITY ===================== -->
+<details id="security" open>
+  <summary style="cursor:pointer; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1rem; font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; list-style: none; display: flex; align-items: center; gap: .5rem;">
+    Security Audit
+    <span class="badge {% if security.security_score >= 80 %}badge-success{% elif security.security_score >= 60 %}badge-warning{% else %}badge-danger{% endif %}" style="font-size:.9rem; padding:.2rem .6rem;">
+      Score: {{ security.security_score }}
+    </span>
+    <span class="badge badge-warning" style="font-size:.9rem; padding:.2rem .6rem;">{{ security.findings | length }} finding{% if security.findings | length != 1 %}s{% endif %}</span>
+  </summary>
+
+  <section style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden;">
+    <div class="section-body">
+      {% if security_by_severity %}
+        {% for severity, findings in security_by_severity.items() %}
+        <h3 style="margin: 1rem 0 .5rem; font-size: .95rem; color: {% if severity == 'critical' %}#dc3545{% elif severity == 'high' %}#fd7e14{% elif severity == 'medium' %}#ffc107{% else %}#6c757d{% endif %}">
+          {{ severity | upper }} ({{ findings | length }})
+        </h3>
+        <table id="security-{{ severity }}-table" style="margin-bottom: 1rem;">
+          <thead><tr>
+            <th onclick="sortTable('security-{{ severity }}-table', 0)">File</th>
+            <th onclick="sortTable('security-{{ severity }}-table', 1)">Rule</th>
+            <th onclick="sortTable('security-{{ severity }}-table', 2)">Severity</th>
+            <th onclick="sortTable('security-{{ severity }}-table', 3)">Detector</th>
+            <th onclick="sortTable('security-{{ severity }}-table', 4)">Line</th>
+            <th onclick="sortTable('security-{{ severity }}-table', 5)">Context</th>
+          </tr></thead>
+          <tbody>
+            {% for f in findings %}
+            <tr>
+              <td>{{ f.path }}</td>
+              <td><code>{{ f.rule_id }}</code></td>
+              <td>
+                <span class="badge {% if f.severity.value == 'critical' %}badge-danger badge-critical{% elif f.severity.value == 'high' %}badge-warning badge-high{% elif f.severity.value == 'medium' %}badge-warning badge-medium{% else %}badge-success badge-low{% endif %}">
+                  {{ f.severity.value | upper }}
+                </span>
+              </td>
+              <td>{{ f.detector }}</td>
+              <td>{{ f.line_no if f.line_no else '—' }}</td>
+              <td><code style="font-size:.8rem; word-break:break-all;">{{ f.match_context }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endfor %}
+      {% else %}
+        <p class="notice">No security findings. Score: {{ security.security_score }}/100.</p>
+      {% endif %}
+    </div>
+  </section>
+</details>
+{% endif %}
+
 </div><!-- /container -->
 
 <script>

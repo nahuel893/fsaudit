@@ -1,0 +1,79 @@
+# fsaudit security patterns — v1
+# Rules ported from well-known open-source secret detection patterns (MIT).
+# Each rule: id, description, severity, regex, keywords (optional pre-filter list).
+
+version: 1
+
+rules:
+  - id: aws-access-key
+    description: AWS Access Key ID
+    severity: critical
+    regex: 'AKIA[0-9A-Z]{16}'
+    keywords:
+      - AKIA
+
+  - id: github-token
+    description: GitHub PAT / Server / OAuth / Refresh token
+    severity: high
+    regex: 'gh[pousr]_[A-Za-z0-9]{36,}'
+    keywords:
+      - ghp_
+      - ghs_
+      - gho_
+      - ghu_
+      - ghr_
+
+  - id: private-key-header
+    description: PEM private key header
+    severity: critical
+    regex: '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+    keywords:
+      - PRIVATE KEY
+
+  - id: slack-token
+    description: Slack API token (xoxb / xoxp / xoxa / xoxr)
+    severity: high
+    regex: 'xox[bparos]-[0-9A-Za-z\-]{10,}'
+    keywords:
+      - xoxb-
+      - xoxp-
+      - xoxa-
+      - xoxr-
+
+  - id: jwt
+    description: JSON Web Token (three-part base64url structure)
+    severity: medium
+    regex: 'eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}'
+    keywords:
+      - eyJ
+
+  - id: connection-string
+    description: Database / broker connection string with embedded credentials
+    severity: high
+    regex: '(?i)(postgres|mysql|mongodb|redis|amqp|mssql)://[^:@\s]{1,}:[^@\s]{1,}@'
+    keywords:
+      - "://"
+      - "@"
+
+  - id: generic-high-entropy
+    description: Assignment of a high-entropy value to a secret-like variable
+    severity: low
+    regex: '(?i)(secret|token|password|api[_\-]?key)\s*[=:]\s*["\x27]?([A-Za-z0-9_\-]{20,})'
+    keywords:
+      - secret
+      - token
+      - password
+      - api
+
+allowlist:
+  # Paths matching these globs are never scanned (fnmatch / PurePosixPath.match)
+  paths:
+    - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/__pycache__/**"
+    - "**/*.lock"
+    - "**/tests/fixtures/**"
+  # Rule IDs in this list are always suppressed, regardless of path
+  rules: []
+  # Regex patterns matched against match_context — suppress if any matches
+  content: []

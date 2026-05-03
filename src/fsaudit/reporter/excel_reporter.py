@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, NamedStyle, PatternFill, numbers
@@ -15,6 +16,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from fsaudit.analyzer.metrics import AnalysisResult
 from fsaudit.reporter.base import BaseReporter
 from fsaudit.scanner.models import FileRecord
+
+if TYPE_CHECKING:
+    from fsaudit.security.models import SecurityResult
 
 # Sheet names in required order (REQ-ES-01).
 SHEET_NAMES: list[str] = [
@@ -28,9 +32,20 @@ SHEET_NAMES: list[str] = [
     "Inventario Completo",
 ]
 
+# Severity order for sorting (lower index = higher severity)
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+# Severity fill colors for the Seguridad sheet
+_SEVERITY_FILLS = {
+    "critical": PatternFill(fill_type="solid", fgColor="FFFF0000"),  # red
+    "high": PatternFill(fill_type="solid", fgColor="FFFFA500"),      # orange
+    "medium": PatternFill(fill_type="solid", fgColor="FFFFFF00"),    # yellow
+    "low": PatternFill(fill_type="solid", fgColor="FFD3D3D3"),       # light gray
+}
+
 
 class ExcelReporter(BaseReporter):
-    """Concrete reporter that writes an 8-sheet Excel workbook."""
+    """Concrete reporter that writes an 8-sheet (or 9-sheet with security) Excel workbook."""
 
     # ------------------------------------------------------------------
     # Public API
@@ -41,8 +56,19 @@ class ExcelReporter(BaseReporter):
         records: list[FileRecord],
         analysis: AnalysisResult,
         output_path: Path,
+        *,
+        security: "SecurityResult | None" = None,
     ) -> Path:
         """Create .xlsx report at *output_path*.
+
+        Args:
+            records: Classified file records.
+            analysis: Pre-computed analysis metrics.
+            output_path: Destination ``.xlsx`` file. Parent dir must exist.
+            security: Optional security scan result. When provided, a 9th
+                ``"Seguridad"`` sheet is appended and security KPIs are
+                added to the Dashboard. When ``None`` (default) the output
+                is identical to v0.10.0 — no new sheets, no new KPIs.
 
         Raises:
             FileNotFoundError: If the parent directory of *output_path*
@@ -64,7 +90,7 @@ class ExcelReporter(BaseReporter):
                 wb.create_sheet(title=name)
 
         # Delegate writing to private methods.
-        self._write_dashboard(wb[SHEET_NAMES[0]], analysis, records)
+        self._write_dashboard(wb[SHEET_NAMES[0]], analysis, records, security=security)
         self._write_por_categoria(wb[SHEET_NAMES[1]], analysis)
         self._write_timeline(wb[SHEET_NAMES[2]], analysis)
         self._write_top_pesados(wb[SHEET_NAMES[3]], analysis)
@@ -72,6 +98,11 @@ class ExcelReporter(BaseReporter):
         self._write_alertas(wb[SHEET_NAMES[5]], analysis, records)
         self._write_por_directorio(wb[SHEET_NAMES[6]], records)
         self._write_inventario(wb[SHEET_NAMES[7]], records)
+
+        # Optional 9th sheet — only when security data is present
+        if security is not None:
+            seg_ws = wb.create_sheet(title="Seguridad")
+            self._write_security_sheet(seg_ws, security)
 
         wb.save(str(output_path))
         return output_path
@@ -145,6 +176,8 @@ class ExcelReporter(BaseReporter):
         ws: Worksheet,
         analysis: AnalysisResult,
         records: list[FileRecord],
+        *,
+        security: "SecurityResult | None" = None,
     ) -> None:
         """KPI overview sheet with professional layout.
 
@@ -152,6 +185,10 @@ class ExcelReporter(BaseReporter):
           Cols A-C: KPIs + tables (left panel)
           Cols E-L: Timeline chart (right panel, immediately visible)
           Below both: Top 5 Categories + Top 5 Directories
+
+        When *security* is provided, two additional KPI cards are appended:
+        - Card 13: "Security Score" (color-coded ≥80 green, 60-79 yellow, <60 red)
+        - Card 14: "Hallazgos" (count of findings)
         """
         title_font = Font(bold=True, size=14)
         section_font = Font(bold=True, size=12)
@@ -175,7 +212,7 @@ class ExcelReporter(BaseReporter):
         score_color = "00B050" if score >= 70 else "FFC000" if score >= 40 else "FF0000"
 
         # KPI rows (label col A, value col B)
-        kpis = [
+        kpis: list[tuple[str, object]] = [
             ("Health Score", f"{score:.1f} / 100"),
             ("Total Archivos", analysis.total_files),
             ("Tamaño Total (MB)", self._bytes_to_mb(analysis.total_size_bytes)),
@@ -203,6 +240,30 @@ class ExcelReporter(BaseReporter):
             biggest_mb = self._bytes_to_mb(biggest.get("size_bytes", 0))
             kpis.append(("Archivo Más Pesado", f"{biggest_name} ({biggest_mb} MB)"))
 
+        # Security KPIs — only when security data is present (Cards 13 & 14)
+        security_kpi_rows: list[tuple[str, object, str]] = []  # (label, value, color)
+        if security is not None:
+            sec_score = security.security_score
+            if sec_score >= 80:
+                sec_color = "00B050"  # green
+            elif sec_score >= 60:
+                sec_color = "FFC000"  # yellow
+            else:
+                sec_color = "FF0000"  # red
+
+            finding_count = len(security.findings)
+            if finding_count == 0:
+                hallazgos_color = "00B050"  # green
+            elif finding_count <= 10:
+                hallazgos_color = "FFC000"  # yellow
+            else:
+                hallazgos_color = "FF0000"  # red
+
+            security_kpi_rows = [
+                ("Security Score", sec_score, sec_color),
+                ("Hallazgos", finding_count, hallazgos_color),
+            ]
+
         for i, (label, value) in enumerate(kpis, start=2):
             ws.cell(row=i, column=1, value=label).font = label_font
             cell = ws.cell(row=i, column=2, value=value)
@@ -211,7 +272,17 @@ class ExcelReporter(BaseReporter):
             if label == "Health Score":
                 cell.font = Font(bold=True, size=14, color=score_color)
 
-        current_row = len(kpis) + 3  # after KPIs + title + blank
+        # Append security KPI rows after the standard KPIs
+        sec_start_row = len(kpis) + 2  # +2 for title row + 1-indexed
+        for j, (label, value, color) in enumerate(security_kpi_rows):
+            row = sec_start_row + j
+            ws.cell(row=row, column=1, value=label).font = label_font
+            cell = ws.cell(row=row, column=2, value=value)
+            cell.font = Font(bold=True, size=14, color=color)
+            cell.fill = PatternFill(fill_type="solid", fgColor="FF" + color)
+
+        total_kpi_count = len(kpis) + len(security_kpi_rows)
+        current_row = total_kpi_count + 3  # after KPIs + title + blank
 
         # Top 5 Categorías por Tamaño section
         ws.cell(row=current_row, column=1, value="Top 5 Categorías por Tamaño").font = section_font
@@ -482,6 +553,59 @@ class ExcelReporter(BaseReporter):
         else:
             last_col = get_column_letter(len(headers))
             ws.auto_filter.ref = f"A1:{last_col}1"
+
+        self._apply_header_style(ws, len(headers))
+        self._auto_column_width(ws)
+
+    def _write_security_sheet(
+        self,
+        ws: Worksheet,
+        security: "SecurityResult",
+    ) -> None:
+        """Write the optional 9th 'Seguridad' sheet with security findings.
+
+        Columns:
+            Archivo, Regla, Severidad, Detector, Línea, Contexto
+
+        Rows are sorted by severity DESC (critical first) then by file path.
+        Severity cells are color-coded. Autofilter and freeze panes applied.
+        """
+        headers = ["Archivo", "Regla", "Severidad", "Detector", "Línea", "Contexto"]
+        ws.append(headers)
+
+        # Sort findings: severity DESC (critical=0, high=1, medium=2, low=3), then path
+        sorted_findings = sorted(
+            security.findings,
+            key=lambda f: (
+                _SEVERITY_ORDER.get(f.severity.value if hasattr(f.severity, "value") else str(f.severity), 99),
+                str(f.path),
+            ),
+        )
+
+        sev_col_idx = headers.index("Severidad") + 1  # 1-based
+
+        for finding in sorted_findings:
+            sev_str = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
+            ws.append([
+                str(finding.path),
+                finding.rule_id,
+                sev_str,
+                finding.detector,
+                finding.line_no,
+                finding.match_context,
+            ])
+            # Color the severity cell
+            fill = _SEVERITY_FILLS.get(sev_str)
+            if fill:
+                ws.cell(row=ws.max_row, column=sev_col_idx).fill = fill
+
+        # Autofilter on the header row
+        last_col = get_column_letter(len(headers))
+        last_row = max(ws.max_row, 1)
+        ws.auto_filter.ref = f"A1:{last_col}{last_row}"
+
+        # Freeze panes at row 2
+        ws.freeze_panes = "A2"
 
         self._apply_header_style(ws, len(headers))
         self._auto_column_width(ws)

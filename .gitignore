@@ -18,6 +18,7 @@ venv/
 
 # Output files
 *.xlsx
+*_audit_*.html
 
 # Logs
 *.log
