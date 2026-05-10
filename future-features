@@ -1,0 +1,148 @@
+🚀 Features nuevas para FSAudit
+1. 🔥 Historical Delta — el Feature REY (Fase 3 del PRD)
+Esto es lo que más falta. Ya tenés SQLite con runs y file_records. Falta:
+- fsaudit diff --from <run_id> --to <run_id>: comparar dos scans del mismo directorio y mostrar archivos NUEVOS, ELIMINADOS, MODIFICADOS (por tamaño o hash).
+- Report sheet "Delta" en Excel con las diferencias.
+- Gráfico de evolución en HTML: cómo cambió el health_score, volumen total, etc. entre scans.
+- Comando fsaudit history --path ~/Documents para ver el historial de scans de un path.
+Valor: transforms la tool de "foto instantánea" a "sistema de monitoreo evolutivo".
+---
+2. ⚡ Scanner Multi-threaded con Progress ETA
+Hoy el scanner es single-thread. Para 100k+ archivos:
+- ThreadPoolExecutor para paralelizar os.stat().
+- Barra de progreso con ETA (ya tenés Rich, falta el ETA).
+- Flag --workers N (default: CPU count).
+- Modo --quick que skipea stat de archivos < 1KB (solo name + extension).
+Valor: performance. Un scan de 200k archivos baja de 60s a ~15s.
+---
+3. 🧠 Magic Bytes Detection (Content-Aware Classification)
+Hoy clasificás por extensión nomás. Si alguien renombra secret.pdf a secret.txt, lo clasificás mal.
+- Usar python-magic (libmagic bindings) para leer magic bytes del header.
+- Flag --magic (opt-in, porque lee headers).
+- Reportar discrepancias: "extension dice .txt, pero magic bytes dicen PDF".
+- Nueva sheet en Excel: "Discrepancias de Tipo".
+Valor: seguridad + precisión. Detecta archivos disfrazados.
+---
+4. 📈 Storage Projection / Growth Trends
+Con datos históricos en SQLite:
+- Calcular tasa de crecimiento diaria/semanal/mensual.
+- Proyectar cuándo se llena el disco: "At this rate, you'll run out of space in 347 days".
+- Flag --project que lee el historial y muestra la proyección.
+- Threshold configurable: --alert-at 80% que marca alerta si el volumen proyectado supera X% del disco.
+Valor: administrativo. Útil para sysadmins y usuarios con discos chicos.
+---
+5. 🎯 Config Profiles (Scenarios)
+Hoy los flags se pasan todos por CLI.
+- Archivo ~/.fsaudit/profiles.yaml:
+quick:
+  depth: 2
+  min-size: 1024
+  format: html
+full-audit:
+  inactive-days: 90
+  hash-duplicates: true
+  security-scan: true
+  magic: true
+security-focused:
+  security-scan: true
+  security-max-size: 10485760
+  format: html
+- fsaudit --profile quick ~/Documents
+- fsaudit profile list, fsaudit profile create <name>
+Valor: UX. Un flag vs 10 flags.
+---
+6. 🧹 Limpieza Asistida (Dry-run → Execute)
+Basado en los hallazgos del analyzer, sugerir acciones:
+- Archivos inactivos > X días → sugerir mover a /tmp/fsaudit-to-delete/
+- Archivos 0 bytes → sugerir eliminar
+- Carpetas vacías → sugerir eliminar
+- Dry-run mode: muestra qué se haría sin hacerlo.
+- Apply mode: fsaudit clean --apply que ejecuta las acciones.
+- Nueva sheet "Acciones Sugeridas" en el Excel.
+Valor: pasa de "observar" a "actuar". Cuidado: operación destructiva, requiere confirmación explícita.
+---
+7. 📊 Interactive HTML Dashboard (Chart.js + Filters)
+El HTML reporter ya existe pero es estático. Mejoras:
+- Chart.js interactivo: pie charts por categoría, timeline como line chart, top files como bar chart.
+- Filtros JS en el inventario completo: buscador, orden por columnas, paginación.
+- Dark mode toggle.
+- Export desde el HTML a CSV de la vista filtrada.
+Valor: visual. Hace que el reporte sea realmente usable.
+---
+8. 🔍 Duplicated Files — Estrategia de Resolución
+Hoy detectás duplicados por hash. Podrías agregar:
+- Para cada grupo de duplicados, sugerir cuál conservar (el más viejo, el de path más corto, etc.).
+- Flag --dedup-report que genera un script .sh/.ps1 con comandos para limpiar.
+- Risk score por duplicado: "este archivo está en 5 lugares y ocupa 2GB total".
+---
+9. 🌐 Network Drive / Mount Point Awareness
+Detectar si un path es un mount point remoto (NFS, SMB, SSHFS) y:
+- Mostrar advertencia: "Network drive detected — scan may be slow".
+- Timer con timeout configurable (--network-timeout 30).
+- Excluir automáticamente ciertos tipos de mounts.
+- Reportar cuánto está en local vs remoto.
+---
+10. 📱 Notificaciones Desktop
+Cuando un scan largo termina:
+- Linux: notify-send (via subprocess)
+- Windows: win10toast o PowerShell
+- macOS: osascript -e 'display notification'
+- Configurable con --notify o en profiles.
+Valor: UX. "El scan de ~/Documents terminó. 45,230 archivos, 12 GB."
+---
+11. 🧪 Extended Attributes (xattr) Analysis
+Leer atributos extendidos de archivos en Linux (getfattr):
+- Detectar archivos con user.xdg.origin.url (descargados de internet).
+- Detectar archivos con security.selinux context.
+- Reportar en sheet "Atributos Extendidos".
+Valor: forense / seguridad.
+---
+12. 🔌 Plugin System via Entry Points
+Hoy todo está acoplado en el pipeline. Podrías:
+- Definir hook points: on_scan_complete, on_classify, on_analyze, on_report.
+- Usar importlib.metadata.entry_points() para descubrir plugins instalados.
+- Ejemplo: un plugin fsaudit-s3-upload que sube el reporte a S3.
+- Sin plugins → mismo comportamiento.
+Valor: extensibilidad. Comunidad puede contribuir sin tocar el core.
+---
+13. 📋 Export a PDF (Resumen Ejecutivo)
+- Reporte PDF de 1-2 páginas con KPIs principales, top 5 hallazgos, health score.
+- Ideal para compartir con no-técnicos.
+- Usar reportlab o weasyprint + HTML.
+---
+14. 🏷️ Tag System Persistente
+- Permitir al usuario asignar tags a archivos: fsaudit tag ~/Documents/report.pdf "important" "work".
+- Tags se guardan en SQLite (nueva tabla file_tags).
+- Sheet "Por Tag" en Excel.
+- Búsqueda por tag en el HTML.
+---
+⚡ Mi recomendación — Order de Implementación
+Prioridad	Feature	Esfuerzo	Impacto
+1️⃣	Historical Delta	Medio	🔥🔥🔥🔥🔥
+2️⃣	Multi-threaded Scanner	Bajo	🔥🔥🔥🔥
+3️⃣	Config Profiles	Bajo	🔥🔥🔥
+4️⃣	Interactive HTML Dashboard	Medio	🔥🔥🔥🔥
+5️⃣	Magic Bytes Detection	Medio	🔥🔥🔥
+6️⃣	Storage Projection	Bajo	🔥🔥🔥
+7️⃣	Limpieza Asistida	Medio-Alto	🔥🔥🔥🔥
+8️⃣	Desktop Notifications	Bajo	🔥🔥
+---
+¿Qué opinás, loco? ¿Te copa alguna en particular? Si querés arrancamos con una vía SDD — /sdd-new y planeamos todo como la gente. El Historical Delta es el feature que más sentido tiene para mi, porque ya tenés toda la infraestructura de persistencia lista, solo falta la comparación.
+
+=====================================
+
+# Nuevas propuestas:
+
+Ideas de mejora propuestas
+1. Parallel scanner (ThreadPoolExecutor con os.scandir) — alto impacto
+2. Scanner en Go como binario separado — 10-15x más rápido
+3. Hash de duplicados lazy (samplear primeros 4KB primero)
+4. Modo watch/daemon con inotify/FSEvents
+5. Exportar a JSON/Parquet para integraciones
+6. Tablero web con FastAPI + HTMX
+7. Reglas de seguridad en Python (detectores contextuales además de YAML)
+8. Benchmarking del health score con datos reales
+9. Reporte "What changed" entre corridas (diff a nivel archivo)
+10. Modo quiet para CI/CD (flag --json)
+11. Sistema de plugins vía entry points
+12. Spring cleaning (asserts → excepciones, type:ignore, cache)
