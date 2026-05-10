@@ -61,6 +61,13 @@ class ResultsScreen(Screen):
             f"[bold {color}]Health Score: {score:.1f}/100[/bold {color}]",
             id="lbl-health",
         )
+        # Show overflow warning if present
+        overflow_warning = self._results.get("overflow_warning")
+        if overflow_warning:
+            yield Label(
+                f"[bold yellow]⚠ {overflow_warning}[/bold yellow]",
+                id="lbl-overflow-warning",
+            )
         with TabbedContent(id="tabs"):
             with TabPane("Summary", id="tab-summary"):
                 yield DataTable(id="dt-summary", zebra_stripes=True)

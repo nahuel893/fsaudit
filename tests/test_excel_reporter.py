@@ -211,7 +211,8 @@ class TestSheetNamesOrder:
         out = tmp_path / "report.xlsx"
         ExcelReporter().generate(sample_records, sample_analysis, out)
         wb = load_workbook(out)
-        assert wb.sheetnames == SHEET_NAMES
+        expected = SHEET_NAMES + ["Inventario Completo"]
+        assert wb.sheetnames == expected
         wb.close()
 
 

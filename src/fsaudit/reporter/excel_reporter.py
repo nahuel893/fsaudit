@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv as csv_mod
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -20,7 +22,11 @@ from fsaudit.scanner.models import FileRecord
 if TYPE_CHECKING:
     from fsaudit.security.models import SecurityResult
 
-# Sheet names in required order (REQ-ES-01).
+# Excel row limits.
+EXCEL_MAX_ROWS: int = 1_048_576
+MAX_INVENTORY_ROWS: int = EXCEL_MAX_ROWS - 1  # 1,048,575 data rows
+
+# Sheet names in required order (7 fixed sheets; inventory is dynamic).
 SHEET_NAMES: list[str] = [
     "Dashboard",
     "Por Categoria",
@@ -29,7 +35,6 @@ SHEET_NAMES: list[str] = [
     "Archivos Inactivos",
     "Alertas",
     "Por Directorio",
-    "Inventario Completo",
 ]
 
 # Severity order for sorting (lower index = higher severity)
@@ -51,6 +56,41 @@ class ExcelReporter(BaseReporter):
     # Public API
     # ------------------------------------------------------------------
 
+    def __init__(self, overflow_strategy: str = "shard") -> None:
+        self.overflow_strategy = overflow_strategy
+
+    def _inventory_sheet_names(self, n_records: int) -> list[str]:
+        """Return inventory sheet names based on record count.
+
+        When ``n_records <= MAX_INVENTORY_ROWS``, returns a single
+        ``"Inventario Completo"``. Otherwise returns N shard names
+        like ``"Inventario 1/3"``, ``"Inventario 2/3"``, ...
+        """
+        if n_records <= MAX_INVENTORY_ROWS:
+            return ["Inventario Completo"]
+        n_shards = math.ceil(n_records / MAX_INVENTORY_ROWS)
+        return [f"Inventario {i} de {n_shards}" for i in range(1, n_shards + 1)]
+
+    def _write_inventory_sheets(
+        self, wb: Workbook, records: list[FileRecord]
+    ) -> int:
+        """Create and populate inventory sheet(s), one per shard if needed.
+
+        Returns the number of inventory sheets created (1 for normal case,
+        N for sharded case).
+        """
+        names = self._inventory_sheet_names(len(records))
+        n_shards = len(names)
+
+        for i, name in enumerate(names):
+            ws = wb.create_sheet(title=name)
+            chunk_start = i * MAX_INVENTORY_ROWS
+            chunk_end = chunk_start + MAX_INVENTORY_ROWS
+            chunk = records[chunk_start:chunk_end]
+            self._write_inventario_chunk(ws, chunk)
+
+        return n_shards
+
     def generate(
         self,
         records: list[FileRecord],
@@ -59,16 +99,18 @@ class ExcelReporter(BaseReporter):
         *,
         security: "SecurityResult | None" = None,
     ) -> Path:
-        """Create .xlsx report at *output_path*.
+        """Create report at *output_path*.
+
+        When ``overflow_strategy == "csv"``, writes a UTF-8 BOM CSV file
+        instead of an xlsx workbook.  Otherwise (``"shard"``), produces
+        the standard multi-sheet Excel workbook with dynamic inventory
+        sharding when rows exceed ``MAX_INVENTORY_ROWS``.
 
         Args:
             records: Classified file records.
             analysis: Pre-computed analysis metrics.
-            output_path: Destination ``.xlsx`` file. Parent dir must exist.
-            security: Optional security scan result. When provided, a 9th
-                ``"Seguridad"`` sheet is appended and security KPIs are
-                added to the Dashboard. When ``None`` (default) the output
-                is identical to v0.10.0 — no new sheets, no new KPIs.
+            output_path: Destination file path. Parent dir must exist.
+            security: Optional security scan result.
 
         Raises:
             FileNotFoundError: If the parent directory of *output_path*
@@ -80,24 +122,46 @@ class ExcelReporter(BaseReporter):
                 f"Parent directory does not exist: {output_path.parent}"
             )
 
+        # CSV mode: generate CSV instead of xlsx, then return early.
+        if self.overflow_strategy == "csv":
+            return self._generate_csv(records, output_path)
+
         wb = Workbook()
 
-        # Create sheets in order — first sheet is auto-created by Workbook().
+        # Create fixed sheets in order — first sheet is auto-created by Workbook().
         for idx, name in enumerate(SHEET_NAMES):
             if idx == 0:
                 wb.active.title = name  # type: ignore[union-attr]
             else:
                 wb.create_sheet(title=name)
 
+        # Create inventory sheet(s) dynamically (shard if overflow, single otherwise).
+        inventory_count = self._write_inventory_sheets(wb, records)
+
+        # Detect overflow and build warning state.
+        # Overflow occurs when inventory_count > 1 (sharded) or always for CSV.
+        overflow = inventory_count > 1
+        self._overflow_warning: str | None = None
+        if overflow:
+            total = len(records)
+            self._overflow_warning = (
+                f"Inventario dividido en {inventory_count} hojas "
+                f"({total} archivos totales). Estrategia: shard"
+            )
+
         # Delegate writing to private methods.
-        self._write_dashboard(wb[SHEET_NAMES[0]], analysis, records, security=security)
+        self._write_dashboard(
+            wb[SHEET_NAMES[0]], analysis, records,
+            security=security,
+            overflow=overflow,
+            inventory_count=inventory_count,
+        )
         self._write_por_categoria(wb[SHEET_NAMES[1]], analysis)
         self._write_timeline(wb[SHEET_NAMES[2]], analysis)
         self._write_top_pesados(wb[SHEET_NAMES[3]], analysis)
         self._write_inactivos(wb[SHEET_NAMES[4]], analysis)
         self._write_alertas(wb[SHEET_NAMES[5]], analysis, records)
         self._write_por_directorio(wb[SHEET_NAMES[6]], records)
-        self._write_inventario(wb[SHEET_NAMES[7]], records)
 
         # Optional 9th sheet — only when security data is present
         if security is not None:
@@ -178,6 +242,8 @@ class ExcelReporter(BaseReporter):
         records: list[FileRecord],
         *,
         security: "SecurityResult | None" = None,
+        overflow: bool = False,
+        inventory_count: int = 1,
     ) -> None:
         """KPI overview sheet with professional layout.
 
@@ -189,6 +255,11 @@ class ExcelReporter(BaseReporter):
         When *security* is provided, two additional KPI cards are appended:
         - Card 13: "Security Score" (color-coded ≥80 green, 60-79 yellow, <60 red)
         - Card 14: "Hallazgos" (count of findings)
+
+        When *overflow* is True, two hazard rows are inserted at rows 2-3:
+        - Row 2: "⚠ OVERFLOW" + warning message
+        - Row 3: "Estrategia" + strategy name ("shard")
+        Standard KPIs shift down by 2 rows.
         """
         title_font = Font(bold=True, size=14)
         section_font = Font(bold=True, size=12)
@@ -197,6 +268,19 @@ class ExcelReporter(BaseReporter):
 
         # Row 1: Title
         ws.cell(row=1, column=1, value="Dashboard").font = title_font
+
+        # Overflow warning rows (only when shard mode overflow triggered)
+        if overflow:
+            warning_font = Font(bold=True, size=12, color="FF0000")
+            total = len(records)
+            overflow_msg = (
+                f"Inventario dividido en {inventory_count} hojas "
+                f"({total} archivos totales)"
+            )
+            ws.cell(row=2, column=1, value="⚠ OVERFLOW").font = warning_font
+            ws.cell(row=2, column=2, value=overflow_msg).font = warning_font
+            ws.cell(row=3, column=1, value="Estrategia").font = label_font
+            ws.cell(row=3, column=2, value="shard").font = value_font
 
         # Alert count: zero-byte + permission issues + duplicate groups
         alert_count = (
@@ -264,7 +348,8 @@ class ExcelReporter(BaseReporter):
                 ("Hallazgos", finding_count, hallazgos_color),
             ]
 
-        for i, (label, value) in enumerate(kpis, start=2):
+        kpi_start_row = 4 if overflow else 2
+        for i, (label, value) in enumerate(kpis, start=kpi_start_row):
             ws.cell(row=i, column=1, value=label).font = label_font
             cell = ws.cell(row=i, column=2, value=value)
             cell.font = value_font
@@ -273,7 +358,7 @@ class ExcelReporter(BaseReporter):
                 cell.font = Font(bold=True, size=14, color=score_color)
 
         # Append security KPI rows after the standard KPIs
-        sec_start_row = len(kpis) + 2  # +2 for title row + 1-indexed
+        sec_start_row = len(kpis) + (4 if overflow else 2)
         for j, (label, value, color) in enumerate(security_kpi_rows):
             row = sec_start_row + j
             ws.cell(row=row, column=1, value=label).font = label_font
@@ -282,7 +367,7 @@ class ExcelReporter(BaseReporter):
             cell.fill = PatternFill(fill_type="solid", fgColor="FF" + color)
 
         total_kpi_count = len(kpis) + len(security_kpi_rows)
-        current_row = total_kpi_count + 3  # after KPIs + title + blank
+        current_row = total_kpi_count + (5 if overflow else 3)  # after KPIs + title + overflow + blank
 
         # Top 5 Categorías por Tamaño section
         ws.cell(row=current_row, column=1, value="Top 5 Categorías por Tamaño").font = section_font
@@ -510,38 +595,35 @@ class ExcelReporter(BaseReporter):
     def _write_inventario(
         self, ws: Worksheet, records: list[FileRecord]
     ) -> None:
-        """Complete inventory sheet with autofilter."""
+        """Complete inventory sheet with autofilter.
+
+        Delegates to ``_write_inventario_chunk`` for the actual writing.
+        """
+        self._write_inventario_chunk(ws, records)
+
+    def _write_inventario_chunk(
+        self, ws: Worksheet, records: list[FileRecord]
+    ) -> None:
+        """Write inventory headers + data + styling to a single worksheet.
+
+        Used both by the single-sheet case (via ``_write_inventario``)
+        and by ``_write_inventory_sheets`` for each shard.
+        """
         headers = [
-            "Ruta",
-            "Nombre",
-            "Extensión",
-            "Tamaño (MB)",
-            "Categoría",
-            "Fecha Modificación",
-            "Fecha Creación",
-            "Último Acceso",
-            "Profundidad",
-            "Oculto",
-            "Permisos",
-            "Directorio Padre",
-            "Autor",
+            "Ruta", "Nombre", "Extensión", "Tamaño (MB)",
+            "Categoría", "Fecha Modificación", "Fecha Creación",
+            "Último Acceso", "Profundidad", "Oculto",
+            "Permisos", "Directorio Padre", "Autor",
         ]
         ws.append(headers)
 
         for rec in records:
             ws.append([
-                str(rec.path),
-                rec.name,
-                rec.extension,
-                self._bytes_to_mb(rec.size_bytes),
-                rec.category,
-                str(rec.mtime),
-                str(rec.creation_time),
-                str(rec.atime),
-                rec.depth,
-                rec.is_hidden,
-                rec.permissions or "",
-                rec.parent_dir,
+                str(rec.path), rec.name, rec.extension,
+                self._bytes_to_mb(rec.size_bytes), rec.category,
+                str(rec.mtime), str(rec.creation_time),
+                str(rec.atime), rec.depth, rec.is_hidden,
+                rec.permissions or "", rec.parent_dir,
                 rec.author or "",
             ])
 
@@ -556,6 +638,62 @@ class ExcelReporter(BaseReporter):
 
         self._apply_header_style(ws, len(headers))
         self._auto_column_width(ws)
+
+    def _generate_csv(
+        self, records: list[FileRecord], output_path: Path
+    ) -> Path:
+        """Generate a UTF-8 BOM CSV file with all inventory records.
+
+        CSV mode replaces xlsx generation entirely — no workbook is created.
+        The output filename follows ``{folder}_inventory_{date}.csv`` instead
+        of the xlsx ``{folder}_audit_{date}.xlsx`` convention.
+
+        Args:
+            records: Classified file records.
+            output_path: Originally intended xlsx path (stem and extension
+                are replaced to produce the CSV path).
+
+        Returns:
+            Path to the created CSV file.
+        """
+        # Derive CSV path: change stem pattern and extension.
+        # xlsx pattern: {folder}_audit_{date}.xlsx → csv pattern: {folder}_inventory_{date}.csv
+        csv_name = output_path.name.replace("_audit_", "_inventory_")
+        if csv_name.endswith(".xlsx"):
+            csv_name = csv_name[:-5] + ".csv"
+        # Handle the unlikely case where the extension isn't .xlsx
+        elif not csv_name.endswith(".csv"):
+            csv_name = csv_name.rsplit(".", 1)[0] + ".csv"
+        csv_path = output_path.parent / csv_name
+
+        headers = [
+            "Ruta", "Nombre", "Extensión", "Tamaño (MB)",
+            "Categoría", "Fecha Modificación", "Fecha Creación",
+            "Último Acceso", "Profundidad", "Oculto",
+            "Permisos", "Directorio Padre", "Autor",
+        ]
+
+        with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv_mod.writer(f)
+            writer.writerow(headers)
+            for rec in records:
+                writer.writerow([
+                    str(rec.path), rec.name, rec.extension,
+                    self._bytes_to_mb(rec.size_bytes), rec.category,
+                    str(rec.mtime), str(rec.creation_time),
+                    str(rec.atime), rec.depth, rec.is_hidden,
+                    rec.permissions or "", rec.parent_dir,
+                    rec.author or "",
+                ])
+
+        # CSV mode always triggers a warning (strategy is explicitly "csv").
+        total = len(records)
+        self._overflow_warning = (
+            f"CSV mode: {total} archivos exportados a {csv_path.name}. "
+            f"Estrategia: csv"
+        )
+
+        return csv_path
 
     def _write_security_sheet(
         self,

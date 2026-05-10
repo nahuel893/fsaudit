@@ -115,6 +115,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="excel",
         help="Output report format: excel (default) or html.",
     )
+    parser.add_argument(
+        "--overflow-strategy",
+        choices=["shard", "csv"],
+        default="shard",
+        help="How to handle Excel row overflow: shard (default, split sheets) or csv.",
+    )
     # --- Persistence flags (Task 2D.4) ---
     parser.add_argument(
         "--save",
@@ -353,6 +359,7 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
             )
 
         # --- 6. Report ---
+        overflow_strategy = getattr(args, "overflow_strategy", "shard")
         fmt = getattr(args, "format", "excel")
         if fmt == "html":
             from fsaudit.reporter.html_reporter import HtmlReporter
@@ -366,10 +373,26 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
             folder_name = path.name
             date_str = datetime.now().strftime("%Y-%m-%d")
             output_path = output_dir / f"{folder_name}_audit_{date_str}.xlsx"
-            reporter = ExcelReporter()
+            reporter = ExcelReporter(overflow_strategy=overflow_strategy)
 
-        reporter.generate(classified, analysis, output_path)
+        report_path = reporter.generate(classified, analysis, output_path)
+        # If CSV mode, report_path is now the CSV file
+        if report_path != output_path:
+            # CSV mode changed the output path
+            output_path = report_path
         console.print(f"Report saved: {output_path}")
+
+        # --- 6b. Overflow warning panel ---
+        overflow_warning = getattr(reporter, "_overflow_warning", None)
+        if overflow_warning and isinstance(overflow_warning, str):
+            console.print(
+                Panel(
+                    overflow_warning,
+                    title="⚠ Overflow",
+                    style="yellow",
+                    expand=False,
+                )
+            )
 
         # --- 6. Persist run if requested ---
         if getattr(args, "save", False):

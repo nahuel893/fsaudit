@@ -14,6 +14,7 @@ from textual.widgets import (
     Label,
     RadioButton,
     RadioSet,
+    Select,
     Switch,
 )
 
@@ -52,6 +53,12 @@ class ConfigScreen(Screen):
         yield Switch(id="switch-extract-author", value=True)
         yield Label("Hide time from dates (show only YYYY-MM-DD):", classes="field-label")
         yield Switch(id="switch-strip-time", value=True)
+        yield Label("Overflow strategy:", classes="field-label")
+        yield Select(
+            [("Shard (split sheets)", "shard"), ("CSV (export as CSV)", "csv")],
+            value="shard",
+            id="select-overflow-strategy",
+        )
         yield Label("", id="lbl-error", classes="error")
         yield Button("Start Audit", id="btn-start", variant="primary")
         yield Button("Back", id="btn-back", variant="default")
@@ -123,6 +130,11 @@ class ConfigScreen(Screen):
         # Strip time
         strip_time = self.query_one("#switch-strip-time", Switch).value
 
+        # Overflow strategy
+        overflow_strategy = self.query_one("#select-overflow-strategy", Select).value
+        if overflow_strategy is Select.BLANK:
+            overflow_strategy = "shard"
+
         error_label.update("")
         self.dismiss(
             ScanConfig(
@@ -135,5 +147,6 @@ class ConfigScreen(Screen):
                 hash_duplicates=hash_dup,
                 extract_author=extract_author,
                 strip_time=strip_time,
+                overflow_strategy=overflow_strategy,
             )
         )

@@ -31,3 +31,4 @@ class ScanConfig:
     extract_author: bool = True
     strip_time: bool = True
     output_dir: Path = field(default_factory=_default_output_dir)
+    overflow_strategy: str = "shard"

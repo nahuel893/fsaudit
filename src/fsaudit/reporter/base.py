@@ -20,6 +20,8 @@ class BaseReporter(ABC):
         records: list[FileRecord],
         analysis: AnalysisResult,
         output_path: Path,
+        *,
+        overflow_strategy: str = "shard",
     ) -> Path:
         """Generate report file.
 
@@ -27,6 +29,9 @@ class BaseReporter(ABC):
             records: Classified file records (one per scanned file).
             analysis: Pre-computed analysis metrics.
             output_path: Destination file path. Parent dir must exist.
+            overflow_strategy: How to handle Excel row overflow.
+                ``"shard"`` splits into multiple sheets; ``"csv"``
+                writes a CSV file instead.  Default ``"shard"``.
 
         Returns:
             Path to the created report file.

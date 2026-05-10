@@ -33,6 +33,7 @@ class AuditResult:
     scan_result: ScanResult
     report_path: Path | None = None
     security: "SecurityResult | None" = None
+    overflow_warning: str | None = None
 
     @property
     def health_score(self) -> float:
@@ -113,6 +114,7 @@ def audit(
     security_scan: bool = False,
     security_config: Path | None = None,
     security_max_size: int | None = None,
+    overflow_strategy: str = "shard",
 ) -> AuditResult:
     """Run the full audit pipeline on *path*.
 
@@ -129,6 +131,9 @@ def audit(
         extract_author: Extract author metadata from office/PDF files.
         strip_time: Zero out time component of mtime/atime/creation_time.
         on_file: Callback invoked with :class:`Path` per scanned file.
+        overflow_strategy: How to handle Excel row overflow. ``"shard"``
+            splits inventory into multiple sheets; ``"csv"`` writes a CSV
+            file instead.  Default ``"shard"``.
 
     Returns:
         :class:`AuditResult` with records, analysis, and optional report path.
@@ -213,6 +218,7 @@ def audit(
 
     # 8. Generate report (optional)
     report_path: Path | None = None
+    overflow_warning: str | None = None
     if format is not None and report_dir is not None:
         date_str = datetime.now().strftime("%Y-%m-%d")
         folder_name = root.name
@@ -221,12 +227,17 @@ def audit(
             from fsaudit.reporter.html_reporter import HtmlReporter
             reporter = HtmlReporter()
             report_path = report_dir / f"{folder_name}_audit_{date_str}.html"
+        elif format == "excel" and overflow_strategy == "csv":
+            from fsaudit.reporter.excel_reporter import ExcelReporter
+            reporter = ExcelReporter(overflow_strategy="csv")
+            report_path = report_dir / f"{folder_name}_audit_{date_str}.xlsx"
         else:
             from fsaudit.reporter.excel_reporter import ExcelReporter
-            reporter = ExcelReporter()
+            reporter = ExcelReporter(overflow_strategy=overflow_strategy)
             report_path = report_dir / f"{folder_name}_audit_{date_str}.xlsx"
 
-        reporter.generate(classified, analysis, report_path)
+        report_path = reporter.generate(classified, analysis, report_path)
+        overflow_warning = getattr(reporter, "_overflow_warning", None)
 
     return AuditResult(
         records=classified,
@@ -234,4 +245,5 @@ def audit(
         scan_result=scan_result,
         report_path=report_path,
         security=security_result,
+        overflow_warning=overflow_warning,
     )

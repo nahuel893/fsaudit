@@ -177,7 +177,7 @@ def _sha256_file(path: str, chunk_size: int = 8192) -> str | None:
     except OSError:
         return None
 
-
+# funcion optimizable utilizando los primeros bits del nombre
 def _find_duplicates_by_hash(
     candidates: dict[str, list[str]],
     *,

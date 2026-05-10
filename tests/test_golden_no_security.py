@@ -27,8 +27,9 @@ GOLDEN_BASELINE = Path(__file__).parent / "fixtures" / "golden" / "audit_baselin
 
 
 def _strip_security(d: dict) -> dict:
-    """Remove the 'security' key (new in v0.11.0) from a dataclasses.asdict() result."""
+    """Remove new-in-v0.11.0 fields from a dataclasses.asdict() result."""
     d.pop("security", None)
+    d.pop("overflow_warning", None)
     return d
 
 
