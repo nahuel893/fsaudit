@@ -240,6 +240,46 @@ class TestRunAllThreadPool:
         assert call_count[0] == 1
 
 
+class TestRunAllPreFilter:
+    """Records that fail should_scan must not be submitted to the executor."""
+
+    def test_scan_file_not_called_for_filtered_records(self, tmp_path: Path) -> None:
+        """When should_scan returns False, scan_file must not be invoked."""
+        from unittest.mock import patch
+
+        from fsaudit.security.detectors.secrets import SecretsDetector
+
+        config = _make_config()
+
+        # Build a record with a binary extension — both content detectors
+        # reject it at the extension gate, so should_scan returns False.
+        record = _make_record(name="photo.jpg", size_bytes=512)
+
+        with patch.object(SecretsDetector, "scan_file") as mock_scan_file:
+            run_all([record], config)
+            assert mock_scan_file.call_count == 0
+
+    def test_scan_file_called_only_for_passing_records(self, tmp_path: Path) -> None:
+        """Mixed records: scan_file called once per passing record, never for the rest."""
+        from unittest.mock import patch
+
+        from fsaudit.security.detectors.secrets import SecretsDetector
+
+        config = _make_config()
+
+        # One passing (.py) + two failing (.jpg, .png)
+        passing = _make_record(name="code.py", path_str=str(tmp_path / "code.py"))
+        (tmp_path / "code.py").write_text("print('hi')\n")
+        failing1 = _make_record(name="img.jpg")
+        failing2 = _make_record(name="img.png")
+
+        with patch.object(
+            SecretsDetector, "scan_file", return_value=[]
+        ) as mock_scan_file:
+            run_all([passing, failing1, failing2], config)
+            assert mock_scan_file.call_count == 1
+
+
 class TestRunAllAllowlist:
     """Allowlist suppression at finding-emit time."""
 

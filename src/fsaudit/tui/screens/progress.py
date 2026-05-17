@@ -11,10 +11,7 @@ from textual.screen import Screen
 from textual.containers import Horizontal
 from textual.widgets import Button, Header, Label, ProgressBar, RichLog
 
-from fsaudit.analyzer.analyzer import analyze
-from fsaudit.classifier.classifier import classify
-from fsaudit.reporter.excel_reporter import ExcelReporter
-from fsaudit.scanner.scanner import FileScanner
+from fsaudit.pipeline import Pipeline
 from fsaudit.tui.models import ScanConfig
 
 
@@ -103,15 +100,33 @@ class ProgressScreen(Screen):
 
     def _run_audit(self) -> dict:
         """Full pipeline — runs in a background thread via self.run_worker."""
+        from fsaudit.pipeline import PipelineConfig
+
         cfg = self._config
 
-        # 1. Scan
-        self._update_phase("Scanning…")
-        scanner = FileScanner(
-            exclude_patterns=cfg.exclude,
+        config = PipelineConfig(
+            root=cfg.root,
             max_depth=cfg.depth,
+            exclude=cfg.exclude,
+            min_size=cfg.min_size,
+            inactive_days=cfg.inactive_days,
+            hash_duplicates=cfg.hash_duplicates,
+            extract_author=cfg.extract_author,
+            strip_time=cfg.strip_time,
+            # TUI does NOT support security_scan (deferred per spec)
+            security_scan=False,
+            format=cfg.format,
+            output_dir=cfg.output_dir,
+            overflow_strategy=cfg.overflow_strategy,
         )
-        scan_result = scanner.scan(cfg.root, on_file=self._on_file_found)
+
+        def _on_phase(phase: str) -> None:
+            self._update_phase(phase)
+
+        result = Pipeline(config).run(
+            on_file=self._on_file_found,
+            on_phase=_on_phase,
+        )
 
         # Final scan count update
         count = self._file_count
@@ -122,100 +137,18 @@ class ProgressScreen(Screen):
                     f"Files found: [bold]{count:,}[/bold] ✓"
                 )
                 bar = self.query_one("#progress", ProgressBar)
-                bar.update(progress=33)
+                bar.update(progress=100)
             except Exception:
                 pass
 
         self.app.call_from_thread(_final_scan_update)
-
-        # 2. Classify
-        self._update_phase(f"Classifying {count:,} files…")
-        classified = classify(scan_result.files)
-
-        # 3. Min-size filter
-        if cfg.min_size > 0:
-            classified = [f for f in classified if f.size_bytes >= cfg.min_size]
-
-        # 4. Author extraction (if configured)
-        if getattr(cfg, "extract_author", False):
-            self._update_phase("Extracting author metadata…")
-            from fsaudit.enricher import enrich_authors
-            classified = enrich_authors(classified)
-
-        # 5. Strip time from dates (if configured)
-        if getattr(cfg, "strip_time", False):
-            from dataclasses import replace
-            classified = [
-                replace(
-                    r,
-                    mtime=r.mtime.replace(hour=0, minute=0, second=0, microsecond=0),
-                    creation_time=r.creation_time.replace(hour=0, minute=0, second=0, microsecond=0),
-                    atime=r.atime.replace(hour=0, minute=0, second=0, microsecond=0),
-                )
-                for r in classified
-            ]
-
-        def _classify_done() -> None:
-            try:
-                bar = self.query_one("#progress", ProgressBar)
-                bar.update(progress=50)
-            except Exception:
-                pass
-
-        self.app.call_from_thread(_classify_done)
-
-        # 5. Analyze
-        self._update_phase("Analyzing…")
-        analysis = analyze(
-            classified,
-            scan_result,
-            inactive_days=cfg.inactive_days,
-            hash_duplicates=cfg.hash_duplicates,
-        )
-
-        def _analyze_done() -> None:
-            try:
-                bar = self.query_one("#progress", ProgressBar)
-                bar.update(progress=75)
-            except Exception:
-                pass
-
-        self.app.call_from_thread(_analyze_done)
-
-        # 6. Generate report
-        self._update_phase("Generating report…")
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        folder_name = cfg.root.name
-
-        if cfg.format == "html":
-            from fsaudit.reporter.html_reporter import HtmlReporter
-
-            reporter = HtmlReporter()
-            output_path = cfg.output_dir / f"{folder_name}_audit_{date_str}.html"
-        else:
-            reporter = ExcelReporter()
-            output_path = cfg.output_dir / f"{folder_name}_audit_{date_str}.xlsx"
-
-        reporter.generate(classified, analysis, output_path)
-
-        def _report_done() -> None:
-            try:
-                bar = self.query_one("#progress", ProgressBar)
-                bar.update(progress=100)
-                self.query_one("#lbl-phase", Label).update(
-                    "[bold green]Audit complete![/bold green]"
-                )
-            except Exception:
-                pass
-
-        self.app.call_from_thread(_report_done)
         self._finished = True
 
         return {
-            "records": classified,
-            "analysis": analysis,
-            "scan_result": scan_result,
-            "report_path": output_path,
+            "records": result.records,
+            "analysis": result.analysis,
+            "scan_result": result.scan_result,
+            "report_path": result.report_path,
         }
 
     def on_worker_state_changed(self, event) -> None:

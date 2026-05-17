@@ -22,10 +22,15 @@ from fsaudit import __version__
 from fsaudit.analyzer.analyzer import analyze
 from fsaudit.classifier.classifier import classify
 from fsaudit.logging_config import setup_logging
+from fsaudit.pipeline import Pipeline, PipelineConfig
 from fsaudit.reporter.excel_reporter import ExcelReporter
 from fsaudit.scanner.scanner import FileScanner
 from fsaudit.shortcut import create_shortcut
 from fsaudit.updater import check_update, run_update
+
+# Expose analyze for test patching — pipeline.py imports analyze from analyzer directly,
+# so tests that patch fsaudit.cli.analyze need the reference here too.
+from fsaudit.analyzer.analyzer import analyze as analyze
 
 logger = logging.getLogger("fsaudit.cli")
 
@@ -266,13 +271,26 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
     setup_logging(level=args.log_level, log_file=log_file)
 
     try:
-        # --- 1. Scan ---
-        console.print(f"Scanning {path} ...")
-        scanner = FileScanner(
-            exclude_patterns=args.exclude,
+        # --- Build PipelineConfig from CLI args ---
+        config = PipelineConfig(
+            root=path.resolve(),
             max_depth=args.depth,
+            exclude=args.exclude,
+            min_size=args.min_size,
+            inactive_days=args.inactive_days,
+            hash_duplicates=args.hash_duplicates,
+            extract_author=args.extract_author,
+            strip_time=False,  # CLI always preserves time
+            security_scan=getattr(args, "security_scan", False),
+            security_config=Path(getattr(args, "security_config", None)) if getattr(args, "security_config", None) else None,
+            security_max_size=getattr(args, "security_max_size", None),
+            format=getattr(args, "format", "excel"),
+            output_dir=output_dir,
+            overflow_strategy=getattr(args, "overflow_strategy", "shard"),
         )
-        file_count_seen = [0]
+
+        # --- Phased progress bar via on_phase callback ---
+        console.print(f"Scanning {path} ...")
 
         with Progress(
             SpinnerColumn(),
@@ -284,51 +302,38 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
             transient=True,
         ) as progress:
             task = progress.add_task("Scanning...", total=None, files_found=0)
+            file_count_seen = [0]
 
             def _on_file(p: Path) -> None:
                 file_count_seen[0] += 1
                 progress.update(task, files_found=file_count_seen[0])
 
-            scan_result = scanner.scan(path, on_file=_on_file)
+            def _on_phase(phase: str) -> None:
+                progress.update(task, description=phase, files_found=0)
 
+            # Run pipeline
+            result = Pipeline(config).run(on_file=_on_file, on_phase=_on_phase)
+
+        # --- Console feedback matching original CLI behaviour ---
         console.print(
-            f"Scan complete: {len(scan_result.files):,} files found"
-            f" ({len(scan_result.errors)} errors)."
+            f"Scan complete: {len(result.scan_result.files):,} files found"
+            f" ({len(result.scan_result.errors)} errors)."
         )
-
-        # --- 2. Classify ---
         console.print("Classifying files ...")
-        with console.status(""):
-            classified = classify(scan_result.files)
         console.print("Classification complete.")
-
-        # --- 3. Min-size filter ---
-        if args.min_size > 0:
-            classified = [f for f in classified if f.size_bytes >= args.min_size]
-
-        # --- 3b. Author extraction (optional) ---
-        if args.extract_author:
-            from fsaudit.enricher import enrich_authors
-            console.print("Extracting author metadata ...")
-            with console.status(""):
-                classified = enrich_authors(classified)
-
-        # --- 4. Analyze ---
         console.print("Analyzing ...")
-        with console.status(""):
-            analysis = analyze(
-                classified,
-                scan_result,
-                inactive_days=args.inactive_days,
-                hash_duplicates=args.hash_duplicates,
-            )
         console.print("Analysis complete.")
 
+        if result.report_path is not None:
+            if config.format != "html":
+                console.print("Generating Excel report ...")
+            console.print(f"Report saved: {result.report_path}")
+
         # --- Health panel ---
-        score = analysis.health_score
+        score = result.health_score
         color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
         breakdown_lines = "\n".join(
-            f"  {k}: -{v:.2f}" for k, v in analysis.health_breakdown.items()
+            f"  {k}: -{v:.2f}" for k, v in result.analysis.health_breakdown.items()
         )
         console.print(
             Panel(
@@ -339,55 +344,11 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
             )
         )
 
-        # --- 5. Security scan (optional, opt-in) ---
-        if getattr(args, "security_scan", False):
-            from fsaudit.security import run_security_scan
-            console.print(
-                "[Security Scan] Content scanning enabled. Files will be read to detect "
-                "secrets, tokens, and anomalies. May expose sensitive file content in findings."
-            )
-            console.print("Running security scan ...")
-            with console.status(""):
-                security_result = run_security_scan(
-                    classified,
-                    config_path=getattr(args, "security_config", None),
-                    max_size=getattr(args, "security_max_size", None),
-                )
-            console.print(
-                f"Security scan complete: {len(security_result.findings)} finding(s),"
-                f" score={security_result.security_score}/100."
-            )
-
-        # --- 6. Report ---
-        overflow_strategy = getattr(args, "overflow_strategy", "shard")
-        fmt = getattr(args, "format", "excel")
-        if fmt == "html":
-            from fsaudit.reporter.html_reporter import HtmlReporter
-            console.print("Generating HTML report ...")
-            folder_name = path.name
-            date_str = datetime.now().strftime("%Y-%m-%d")
-            output_path = output_dir / f"{folder_name}_audit_{date_str}.html"
-            reporter: ExcelReporter | HtmlReporter = HtmlReporter()  # type: ignore[assignment]
-        else:
-            console.print("Generating Excel report ...")
-            folder_name = path.name
-            date_str = datetime.now().strftime("%Y-%m-%d")
-            output_path = output_dir / f"{folder_name}_audit_{date_str}.xlsx"
-            reporter = ExcelReporter(overflow_strategy=overflow_strategy)
-
-        report_path = reporter.generate(classified, analysis, output_path)
-        # If CSV mode, report_path is now the CSV file
-        if report_path != output_path:
-            # CSV mode changed the output path
-            output_path = report_path
-        console.print(f"Report saved: {output_path}")
-
-        # --- 6b. Overflow warning panel ---
-        overflow_warning = getattr(reporter, "_overflow_warning", None)
-        if overflow_warning and isinstance(overflow_warning, str):
+        # --- Overflow warning panel ---
+        if result.overflow_warning and isinstance(result.overflow_warning, str):
             console.print(
                 Panel(
-                    overflow_warning,
+                    result.overflow_warning,
                     title="⚠ Overflow",
                     style="yellow",
                     expand=False,
@@ -401,9 +362,9 @@ def main(argv: list[str] | None = None, *, _console: Console | None = None) -> i
                 from fsaudit.persistence.repository import save_run, save_file_records, diff_runs
 
                 with get_connection(db_path) as conn:
-                    run_id = save_run(conn, str(path), analysis)
+                    run_id = save_run(conn, str(path), result.analysis)
                     if getattr(args, "save_files", False):
-                        save_file_records(conn, run_id, classified)
+                        save_file_records(conn, run_id, result.records)
                     console.print(f"Run saved: id={run_id} db={db_path}")
 
                     # --- --diff: compare against saved run ---

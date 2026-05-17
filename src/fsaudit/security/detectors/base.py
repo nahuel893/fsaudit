@@ -85,6 +85,20 @@ class ContentDetector(ABC):
         """Unique detector name."""
         ...
 
+    def should_scan(self, record: FileRecord) -> bool:
+        """Cheap metadata pre-filter for ``record``.
+
+        Returns ``True`` if the detector may emit findings for ``record`` based
+        on metadata alone (size, extension, etc.).  The pipeline orchestrator
+        calls this BEFORE submitting a future to the executor, avoiding
+        millions of no-op task submissions on large scans.
+
+        Default implementation returns ``True`` (no pre-filter).  Subclasses
+        should override to mirror their internal metadata gates so the work is
+        skipped at submission time instead of inside the worker.
+        """
+        return True
+
     @abstractmethod
     def scan_file(
         self,

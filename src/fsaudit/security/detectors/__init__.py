@@ -108,7 +108,12 @@ def run_all(
             futures = []
             for detector in content_detectors:
                 compiled = compiled_rules_map.get(detector.name)
+                # Pre-filter: skip records that fail the detector's cheap
+                # metadata gates so no future is submitted for guaranteed
+                # no-op work. Saves O(n) submit/lock overhead on big scans.
                 for record in records:
+                    if not detector.should_scan(record):
+                        continue
                     fut = executor.submit(
                         detector.scan_file,
                         record,

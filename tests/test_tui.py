@@ -180,18 +180,21 @@ async def test_progress_screen_renders():
     mock_analysis.duplicates_by_name = {}
     mock_analysis.duplicates_by_hash = {}
 
+    mock_audit_result = MagicMock()
+    mock_audit_result.records = []
+    mock_audit_result.analysis = mock_analysis
+    mock_audit_result.scan_result = mock_scan_result
+    mock_audit_result.report_path = Path("/tmp/report.xlsx")
+    mock_audit_result.overflow_warning = None
+
     class TestApp(App):
         def on_mount(self) -> None:
             self.push_screen(ProgressScreen(config=cfg))
 
     with (
-        patch("fsaudit.tui.screens.progress.FileScanner") as mock_scanner_cls,
-        patch("fsaudit.tui.screens.progress.classify", return_value=[]),
-        patch("fsaudit.tui.screens.progress.analyze", return_value=mock_analysis),
-        patch("fsaudit.tui.screens.progress.ExcelReporter") as mock_reporter_cls,
+        patch("fsaudit.tui.screens.progress.Pipeline") as mock_pipeline_cls,
     ):
-        mock_scanner_cls.return_value.scan.return_value = mock_scan_result
-        mock_reporter_cls.return_value.generate.return_value = Path("/tmp/report.xlsx")
+        mock_pipeline_cls.return_value.run.return_value = mock_audit_result
 
         async with TestApp().run_test(headless=True) as pilot:
             await pilot.pause()

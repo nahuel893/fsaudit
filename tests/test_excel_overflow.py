@@ -758,8 +758,8 @@ class TestCliOverflowStrategy:
 
         dummy_result = AnalysisResult()
 
-        with patch("fsaudit.cli.ExcelReporter") as mock_reporter_cls, \
-             patch("fsaudit.cli.analyze", return_value=dummy_result):
+        with patch("fsaudit.reporter.excel_reporter.ExcelReporter") as mock_reporter_cls, \
+             patch("fsaudit.pipeline._analyze", return_value=dummy_result):
             mock_reporter_cls.return_value.generate.return_value = None
             result = main([
                 "--path", str(tmp_path),

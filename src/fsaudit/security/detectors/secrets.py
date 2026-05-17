@@ -122,6 +122,19 @@ class SecretsDetector(ContentDetector):
     # Public interface
     # ------------------------------------------------------------------
 
+    def should_scan(self, record: "FileRecord") -> bool:
+        """Pre-filter: mirror size + extension gates from :meth:`scan_file`.
+
+        Lets the orchestrator skip records that would be rejected at gates 1-2
+        anyway, avoiding pointless future submissions.  Null-byte probe (gate
+        3) requires I/O and stays inside ``scan_file``.
+        """
+        if record.size_bytes > _DEFAULT_MAX_SIZE_BYTES:
+            return False
+        if record.extension.lower() not in _TEXT_EXTENSIONS:
+            return False
+        return True
+
     def compile_rules(self, config: "SecurityConfig") -> list[_CompiledRule]:
         """Compile all rules from *config* into regex patterns.
 

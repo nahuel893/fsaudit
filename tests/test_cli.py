@@ -314,8 +314,8 @@ class TestHashDuplicatesCLI:
 
         dummy_result = AnalysisResult()
 
-        with patch("fsaudit.cli.analyze", return_value=dummy_result) as mock_analyze, \
-             patch("fsaudit.cli.ExcelReporter") as mock_reporter:
+        with patch("fsaudit.pipeline._analyze", return_value=dummy_result) as mock_analyze, \
+             patch("fsaudit.reporter.excel_reporter.ExcelReporter") as mock_reporter:
             mock_reporter.return_value.generate.return_value = None
             result = main([
                 "--path", str(tmp_path),

@@ -7,6 +7,7 @@ delegates to 8 private helpers, one per metric group (RF-09 through RF-16).
 from __future__ import annotations
 
 import hashlib
+import heapq
 import math
 import os
 from collections import Counter, defaultdict
@@ -108,8 +109,13 @@ def _compute_timeline(records: list[FileRecord]) -> dict[str, int]:
 
 
 def _find_top_largest(records: list[FileRecord], n: int) -> list[dict]:
-    """RF-10: Top N largest files sorted descending by size."""
-    sorted_recs = sorted(records, key=lambda r: r.size_bytes, reverse=True)
+    """RF-10: Top N largest files sorted descending by size.
+
+    Uses ``heapq.nlargest`` (O(len(records) * log n)) instead of a full sort
+    (O(len(records) * log len(records))) so big scans pay only for the heap
+    of size ``n`` we actually return.
+    """
+    top_recs = heapq.nlargest(n, records, key=lambda r: r.size_bytes)
     return [
         {
             "path": str(r.path),
@@ -117,7 +123,7 @@ def _find_top_largest(records: list[FileRecord], n: int) -> list[dict]:
             "category": r.category,
             "mtime": r.mtime,
         }
-        for r in sorted_recs[:n]
+        for r in top_recs
     ]
 
 

@@ -9,17 +9,13 @@ Usage::
 
 from __future__ import annotations
 
-import platform
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
-from fsaudit.analyzer.analyzer import analyze as _analyze
 from fsaudit.analyzer.metrics import AnalysisResult
-from fsaudit.classifier.classifier import classify as _classify
+from fsaudit.pipeline import Pipeline, PipelineConfig
 from fsaudit.scanner.models import FileRecord, ScanResult
-from fsaudit.scanner.scanner import FileScanner
 
 _VALID_FORMATS = {"excel", "html"}
 
@@ -56,16 +52,6 @@ class AuditResult:
         return self.analysis.by_category
 
 
-def _default_output_dir() -> Path:
-    """Default export directory: Desktop on Windows, Home on Linux/macOS."""
-    if platform.system() == "Windows":
-        desktop = Path.home() / "Desktop"
-        if not desktop.exists():
-            desktop = Path.home() / "OneDrive" / "Desktop"
-        return desktop if desktop.exists() else Path.home()
-    return Path.home()
-
-
 def scan(
     path: str | Path,
     *,
@@ -87,6 +73,8 @@ def scan(
     Raises:
         FileNotFoundError: If *path* does not exist or is not a directory.
     """
+    from fsaudit.scanner.scanner import FileScanner
+
     root = Path(path).resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"'{path}' does not exist or is not a directory")
@@ -156,94 +144,37 @@ def audit(
     # Resolve and validate output directory (only when generating a report)
     report_dir: Path | None = None
     if format is not None:
+        import platform
+
+        def _default_output_dir() -> Path:
+            if platform.system() == "Windows":
+                desktop = Path.home() / "Desktop"
+                if not desktop.exists():
+                    desktop = Path.home() / "OneDrive" / "Desktop"
+                return desktop if desktop.exists() else Path.home()
+            return Path.home()
+
         report_dir = Path(output_dir).resolve() if output_dir else _default_output_dir()
         if not report_dir.is_dir():
             raise FileNotFoundError(
                 f"Output directory '{output_dir}' does not exist"
             )
 
-    # 1. Scan
-    scan_result = scan(root, max_depth=max_depth, exclude=exclude, on_file=on_file)
-
-    # 2. Classify
-    classified = _classify(scan_result.files)
-
-    # 3. Min-size filter
-    if min_size > 0:
-        classified = [f for f in classified if f.size_bytes >= min_size]
-
-    # 4. Author extraction (optional)
-    if extract_author:
-        from fsaudit.enricher import enrich_authors
-        classified = enrich_authors(classified)
-
-    # 5. Strip time component (optional)
-    if strip_time:
-        from dataclasses import replace
-        classified = [
-            replace(
-                r,
-                mtime=r.mtime.replace(hour=0, minute=0, second=0, microsecond=0),
-                creation_time=r.creation_time.replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                ),
-                atime=r.atime.replace(hour=0, minute=0, second=0, microsecond=0),
-            )
-            for r in classified
-        ]
-
-    # 6. Analyze
-    analysis = _analyze(
-        classified,
-        scan_result,
+    config = PipelineConfig(
+        root=root,
+        max_depth=max_depth,
+        exclude=exclude or [],
+        min_size=min_size,
         inactive_days=inactive_days,
         hash_duplicates=hash_duplicates,
+        extract_author=extract_author,
+        strip_time=strip_time,
+        security_scan=security_scan,
+        security_config=security_config,
+        security_max_size=security_max_size,
+        format=format,
+        output_dir=report_dir,
+        overflow_strategy=overflow_strategy,
     )
 
-    # 7. Security scan (optional, opt-in)
-    security_result = None
-    if security_scan:
-        import sys as _sys
-        print(  # noqa: T201
-            "[Security Scan] Content scanning enabled. Files will be read to detect "
-            "secrets, tokens, and anomalies. May expose sensitive file content in findings.",
-            file=_sys.stdout,
-        )
-        from fsaudit.security import run_security_scan as _run_security_scan
-        security_result = _run_security_scan(
-            classified,
-            config_path=security_config,
-            max_size=security_max_size,
-        )
-
-    # 8. Generate report (optional)
-    report_path: Path | None = None
-    overflow_warning: str | None = None
-    if format is not None and report_dir is not None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        folder_name = root.name
-
-        if format == "html":
-            from fsaudit.reporter.html_reporter import HtmlReporter
-            reporter = HtmlReporter()
-            report_path = report_dir / f"{folder_name}_audit_{date_str}.html"
-        elif format == "excel" and overflow_strategy == "csv":
-            from fsaudit.reporter.excel_reporter import ExcelReporter
-            reporter = ExcelReporter(overflow_strategy="csv")
-            report_path = report_dir / f"{folder_name}_audit_{date_str}.xlsx"
-        else:
-            from fsaudit.reporter.excel_reporter import ExcelReporter
-            reporter = ExcelReporter(overflow_strategy=overflow_strategy)
-            report_path = report_dir / f"{folder_name}_audit_{date_str}.xlsx"
-
-        report_path = reporter.generate(classified, analysis, report_path)
-        overflow_warning = getattr(reporter, "_overflow_warning", None)
-
-    return AuditResult(
-        records=classified,
-        analysis=analysis,
-        scan_result=scan_result,
-        report_path=report_path,
-        security=security_result,
-        overflow_warning=overflow_warning,
-    )
+    return Pipeline(config).run(on_file=on_file)
